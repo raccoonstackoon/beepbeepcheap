@@ -1,0 +1,19 @@
+{
+  "name": "beepbeep-cheap",
+  "version": "1.0.0",
+  "description": "🚗 Track prices and never miss a deal!",
+  "scripts": {
+    "install:all": "cd backend && npm install && cd ../frontend && npm install",
+    "build": "cd frontend && npm run build",
+    "start": "cd backend && npm start",
+    "dev": "concurrently \"cd backend && npm run dev\" \"cd frontend && npm run dev\"",
+    "postinstall": "npm run install:all"
+  },
+  "keywords": ["price-tracker", "deals", "shopping"],
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
+

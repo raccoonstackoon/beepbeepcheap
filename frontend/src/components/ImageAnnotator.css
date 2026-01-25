@@ -1,0 +1,265 @@
+.image-annotator {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+/* Instructions banner */
+.annotator-instructions {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-md);
+  padding: var(--space-md);
+  background: linear-gradient(135deg, var(--accent-gold-soft) 0%, rgba(255, 200, 87, 0.05) 100%);
+  border: 1px solid rgba(255, 200, 87, 0.3);
+  border-radius: var(--radius-md);
+}
+
+.instruction-icon {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent-gold-soft);
+  border-radius: var(--radius-sm);
+  color: var(--accent-gold);
+  flex-shrink: 0;
+}
+
+.instruction-text h4 {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: var(--space-xs);
+}
+
+.instruction-text p {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  margin: 0;
+  line-height: 1.4;
+}
+
+/* Tool selector */
+.tool-selector {
+  display: flex;
+  gap: var(--space-sm);
+  padding: var(--space-xs);
+  background: var(--bg-secondary);
+  border-radius: var(--radius-md);
+  width: fit-content;
+}
+
+.tool-btn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-sm) var(--space-md);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.tool-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-card);
+}
+
+.tool-btn.active {
+  background: var(--accent-gold);
+  color: var(--bg-primary);
+}
+
+.tool-btn.active:hover {
+  background: #e6b34e;
+}
+
+/* Main annotation container */
+.annotator-container {
+  position: relative;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--bg-secondary);
+  user-select: none;
+  touch-action: none;
+  cursor: crosshair;
+}
+
+.annotator-image {
+  display: block;
+  width: 100%;
+  max-height: 350px;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+/* Canvas overlay for drawing */
+.annotator-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+/* Draw hint overlay */
+.draw-hint {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-lg) var(--space-xl);
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  border-radius: var(--radius-lg);
+  color: var(--accent-gold);
+  pointer-events: none;
+  animation: pulse-hint 2s ease-in-out infinite;
+}
+
+.draw-hint span {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+@keyframes pulse-hint {
+  0%, 100% {
+    opacity: 0.9;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.05);
+  }
+}
+
+/* Helper text */
+.annotator-help {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-sm);
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  text-align: center;
+  padding: var(--space-xs) 0;
+}
+
+/* Actions */
+.annotator-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: var(--space-md);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.action-group {
+  display: flex;
+  gap: var(--space-sm);
+}
+
+/* Highlight preview feedback - visual feedback while drawing */
+.annotator-container::after {
+  content: '';
+  position: absolute;
+  bottom: var(--space-sm);
+  right: var(--space-sm);
+  padding: var(--space-xs) var(--space-sm);
+  background: rgba(0, 0, 0, 0.6);
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.annotator-container:active::after {
+  content: 'Drawing...';
+  opacity: 1;
+}
+
+/* Responsive adjustments */
+@media (max-width: 480px) {
+  .annotator-instructions {
+    flex-direction: column;
+    text-align: center;
+  }
+
+  .instruction-icon {
+    align-self: center;
+  }
+
+  .annotator-image {
+    max-height: 280px;
+  }
+
+  .tool-selector {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .tool-btn {
+    flex: 1;
+    justify-content: center;
+  }
+
+  .draw-hint {
+    padding: var(--space-md);
+  }
+
+  .draw-hint span {
+    font-size: 0.8rem;
+  }
+
+  .annotator-help {
+    font-size: 0.8rem;
+  }
+
+  .annotator-actions {
+    flex-direction: column-reverse;
+    gap: var(--space-md);
+  }
+
+  .annotator-actions .btn-ghost {
+    width: 100%;
+  }
+
+  .action-group {
+    width: 100%;
+  }
+
+  .action-group .btn {
+    flex: 1;
+  }
+}
+
+/* Touch-specific styles */
+@media (hover: none) and (pointer: coarse) {
+  .annotator-container {
+    /* Larger touch target */
+    min-height: 250px;
+  }
+  
+  .tool-btn {
+    padding: var(--space-md);
+  }
+  
+  .draw-hint {
+    font-size: 1rem;
+  }
+}
