@@ -19,6 +19,9 @@ import ItemCard from '../components/ItemCard';
 import AddItemModal from '../components/AddItemModal';
 import AlertBanner from '../components/AlertBanner';
 import { Hyrax, Raccoon } from '../components/PixelMascot';
+// Import mascot images
+import hyraxImage from '../assets/hyrax.png';
+import raccoonImage from '../assets/raccoon.png';
 import './Dashboard.css';
 
 export default function Dashboard({ items, alerts, onRefresh, apiBase }) {
@@ -100,44 +103,23 @@ export default function Dashboard({ items, alerts, onRefresh, apiBase }) {
 
       {/* Hero Section - Retro Game Menu */}
       <section className="hero-modern">
-        <div className="hero-modern-background">
-          <div className="gradient-orb gradient-orb-1"></div>
-          <div className="gradient-orb gradient-orb-2"></div>
-          <div className="gradient-orb gradient-orb-3"></div>
-        </div>
         <div className="hero-modern-content">
           <div className="hero-badge">
             <span>⭐</span>
             <span>Price Tracking Made Simple</span>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '16px', marginBottom: '16px' }}>
-            <Hyrax variant="smiling" className="medium" />
+          <div className="hero-title-wrapper">
+            <Hyrax variant="smiling" className="medium" useGif={hyraxImage !== null} gifSrc={hyraxImage} />
             <h1 className="hero-title-modern">
               Never Miss a<br />
               <span className="gradient-text">Great Deal</span>
             </h1>
-            <Raccoon variant="waving" className="medium" />
+            <Raccoon variant="waving" className="medium" useGif={true} gifSrc={raccoonImage} />
           </div>
           <p className="hero-description">
             Track prices, get alerts, and save money on your favorite products.
             Smart shopping starts here.
           </p>
-          <div className="hero-stats-modern">
-            <div className="hero-stat-item">
-              <div className="hero-stat-value">{totalItems}</div>
-              <div className="hero-stat-label">Items Tracked</div>
-            </div>
-            <div className="hero-stat-divider"></div>
-            <div className="hero-stat-item">
-              <div className="hero-stat-value">{itemsWithDrops}</div>
-              <div className="hero-stat-label">Price Drops</div>
-            </div>
-            <div className="hero-stat-divider"></div>
-            <div className="hero-stat-item">
-              <div className="hero-stat-value">£{totalSavings.toFixed(2)}</div>
-              <div className="hero-stat-label">Saved</div>
-            </div>
-          </div>
         </div>
       </section>
 
@@ -173,7 +155,7 @@ export default function Dashboard({ items, alerts, onRefresh, apiBase }) {
         <div className="stats-modern-grid">
           <div className="stat-card-modern">
             <div className="stat-card-icon">
-              <Package size={28} />
+              <Package size={20} />
             </div>
             <div className="stat-card-content">
               <div className="stat-card-value">{totalItems}</div>
@@ -182,7 +164,7 @@ export default function Dashboard({ items, alerts, onRefresh, apiBase }) {
           </div>
           <div className="stat-card-modern stat-card-modern-accent">
             <div className="stat-card-icon stat-card-icon-accent">
-              <TrendingDown size={28} />
+              <TrendingDown size={20} />
             </div>
             <div className="stat-card-content">
               <div className="stat-card-value">{itemsWithDrops}</div>

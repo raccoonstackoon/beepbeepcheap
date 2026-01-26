@@ -1,6 +1,15 @@
 import './PixelMascot.css';
 
-export function Hyrax({ variant = 'smiling', className = '' }) {
+export function Hyrax({ variant = 'smiling', className = '', useGif = false, gifSrc = null }) {
+  // If using a gif, render an img tag instead of SVG
+  if (useGif && gifSrc) {
+    return (
+      <div className={`pixel-mascot hyrax hyrax-${variant} ${className} hyrax-gif`}>
+        <img src={gifSrc} alt="Hyrax" className="mascot-gif" />
+      </div>
+    );
+  }
+
   return (
     <div className={`pixel-mascot hyrax hyrax-${variant} ${className}`}>
       <svg width="64" height="64" viewBox="0 0 64 64" className="mascot-svg">
@@ -35,7 +44,16 @@ export function Hyrax({ variant = 'smiling', className = '' }) {
   );
 }
 
-export function Raccoon({ variant = 'waving', className = '' }) {
+export function Raccoon({ variant = 'waving', className = '', useGif = false, gifSrc = null }) {
+  // If using a gif/image, render an img tag instead of SVG
+  if (useGif && gifSrc) {
+    return (
+      <div className={`pixel-mascot raccoon raccoon-${variant} ${className} raccoon-gif`}>
+        <img src={gifSrc} alt="Raccoon" className="mascot-gif" />
+      </div>
+    );
+  }
+
   return (
     <div className={`pixel-mascot raccoon raccoon-${variant} ${className}`}>
       <svg width="64" height="64" viewBox="0 0 64 64" className="mascot-svg">

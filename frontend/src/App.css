@@ -15,7 +15,8 @@
 .loading-logo {
   font-size: var(--font-size-2xl);
   animation: pixel-bounce 1s ease-in-out infinite;
-  text-shadow: var(--shadow-pixel);
+  -webkit-text-stroke: 0.5px var(--pixel-black);
+  text-shadow: none;
   color: var(--pixel-teal);
 }
 
@@ -57,13 +58,15 @@ h1, h2, h3, h4, h5, h6 {
 h1 {
   font-size: var(--font-size-xl);
   color: var(--pixel-teal);
-  text-shadow: var(--shadow-pixel-sm);
+  -webkit-text-stroke: 0.5px var(--pixel-black);
+  text-shadow: none;
 }
 
 h2 {
   font-size: var(--font-size-lg);
   color: var(--pixel-sky-blue);
-  text-shadow: var(--shadow-pixel-sm);
+  -webkit-text-stroke: 0.5px var(--pixel-black);
+  text-shadow: none;
 }
 
 h3 {

@@ -13,6 +13,34 @@
   image-rendering: crisp-edges;
 }
 
+/* Gif mascot styles */
+.mascot-gif {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  image-rendering: pixelated;
+  image-rendering: -moz-crisp-edges;
+  image-rendering: crisp-edges;
+  background: transparent;
+  mix-blend-mode: normal;
+}
+
+.hyrax-gif {
+  background: transparent;
+}
+
+.hyrax-gif .mascot-gif {
+  display: block;
+}
+
+.raccoon-gif {
+  background: transparent;
+}
+
+.raccoon-gif .mascot-gif {
+  display: block;
+}
+
 /* Hyrax Animations */
 .hyrax {
   animation: hyrax-idle 2s ease-in-out infinite;

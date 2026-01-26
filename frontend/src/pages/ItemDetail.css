@@ -254,7 +254,8 @@
   font-family: var(--font-pixel);
   font-size: var(--font-size-md);
   color: var(--pixel-sky-blue);
-  text-shadow: 2px 2px 0px var(--pixel-outline);
+  -webkit-text-stroke: 0.5px var(--pixel-black);
+  text-shadow: none;
 }
 
 .no-history {
@@ -271,7 +272,8 @@
   font-family: var(--font-pixel);
   font-size: var(--font-size-md);
   color: var(--pixel-sky-blue);
-  text-shadow: 2px 2px 0px var(--pixel-outline);
+  -webkit-text-stroke: 0.5px var(--pixel-black);
+  text-shadow: none;
 }
 
 .history-table-wrapper {

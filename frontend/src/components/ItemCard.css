@@ -111,7 +111,8 @@
   letter-spacing: 0.05em;
   color: var(--pixel-lavender);
   margin-bottom: var(--space-xs);
-  text-shadow: 1px 1px 0px var(--pixel-outline);
+  -webkit-text-stroke: 0.5px var(--pixel-black);
+  text-shadow: none;
 }
 
 .item-name {
