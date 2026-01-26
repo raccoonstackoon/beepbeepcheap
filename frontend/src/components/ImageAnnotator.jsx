@@ -1,16 +1,16 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Check, RotateCcw, Eraser, Highlighter } from 'lucide-react';
+import { Check, RotateCcw, PenLine } from 'lucide-react';
 import './ImageAnnotator.css';
 
 /**
- * ImageAnnotator - A freehand highlighting/scrubbing tool
+ * ImageAnnotator - A freehand drawing tool for circling/marking items
  * 
- * Users can "rub" their finger or mouse over areas of the image to highlight
- * what they want the AI to focus on - like using a highlighter pen.
+ * Users can draw around areas of the image to indicate what they want
+ * the AI to focus on - like circling something with a pen.
  * 
  * Props:
  * - imageUrl: The image to annotate (required)
- * - onConfirm: Callback with the highlight mask data (required)
+ * - onConfirm: Callback with the drawn area data (required)
  * - onCancel: Callback when user wants to go back (required)
  * - mode: 'pricetag' or 'product' - affects the instruction text (optional)
  */
@@ -24,13 +24,11 @@ export default function ImageAnnotator({ imageUrl, onConfirm, onCancel, mode = '
   
   // Drawing state
   const [isDrawing, setIsDrawing] = useState(false);
-  const [tool, setTool] = useState('highlight'); // 'highlight' or 'eraser'
   const [hasDrawn, setHasDrawn] = useState(false);
   
-  // Brush settings
-  const brushSize = 40; // Finger-friendly size
-  const highlightColor = 'rgba(255, 200, 87, 0.5)'; // Gold highlight
-  const eraserSize = 50;
+  // Brush settings - thinner line for drawing around items
+  const brushSize = 6; // Pen-like stroke width
+  const strokeColor = '#FF6B35'; // Vibrant orange for visibility
 
   // Initialize canvas when image loads
   const handleImageLoad = useCallback(() => {
@@ -117,26 +115,22 @@ export default function ImageAnnotator({ imageUrl, onConfirm, onCancel, mode = '
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
     
+    // Set up drawing style - pen-like stroke
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.strokeStyle = strokeColor;
+    ctx.lineWidth = brushSize;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    
     ctx.beginPath();
     ctx.moveTo(pos.x, pos.y);
     
-    // Draw a dot at start position
-    if (tool === 'highlight') {
-      ctx.globalCompositeOperation = 'source-over';
-      ctx.strokeStyle = highlightColor;
-      ctx.lineWidth = brushSize;
-    } else {
-      ctx.globalCompositeOperation = 'destination-out';
-      ctx.lineWidth = eraserSize;
-    }
-    
+    // Draw a small dot at start position
     ctx.lineTo(pos.x + 0.1, pos.y + 0.1);
     ctx.stroke();
     
-    if (tool === 'highlight') {
-      setHasDrawn(true);
-    }
-  }, [getPosition, tool, brushSize, eraserSize, highlightColor]);
+    setHasDrawn(true);
+  }, [getPosition, brushSize, strokeColor]);
 
   // Continue drawing
   const handleMove = useCallback((e) => {
@@ -147,24 +141,18 @@ export default function ImageAnnotator({ imageUrl, onConfirm, onCancel, mode = '
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
     
-    if (tool === 'highlight') {
-      ctx.globalCompositeOperation = 'source-over';
-      ctx.strokeStyle = highlightColor;
-      ctx.lineWidth = brushSize;
-    } else {
-      ctx.globalCompositeOperation = 'destination-out';
-      ctx.lineWidth = eraserSize;
-    }
+    // Continue the stroke
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.strokeStyle = strokeColor;
+    ctx.lineWidth = brushSize;
     
     ctx.lineTo(pos.x, pos.y);
     ctx.stroke();
     ctx.beginPath();
     ctx.moveTo(pos.x, pos.y);
     
-    if (tool === 'highlight') {
-      setHasDrawn(true);
-    }
-  }, [isDrawing, getPosition, tool, brushSize, eraserSize, highlightColor]);
+    setHasDrawn(true);
+  }, [isDrawing, getPosition, brushSize, strokeColor]);
 
   // Stop drawing
   const handleEnd = useCallback(() => {
@@ -249,13 +237,13 @@ export default function ImageAnnotator({ imageUrl, onConfirm, onCancel, mode = '
   const getInstructions = () => {
     if (mode === 'pricetag') {
       return {
-        title: 'Highlight the Price Area',
-        description: 'Rub your finger over the price and product name'
+        title: 'Circle the Price Area',
+        description: 'Draw around the price tag or product name'
       };
     }
     return {
-      title: 'Highlight the Product',
-      description: 'Rub your finger over the product you want to track'
+      title: 'Circle the Product',
+      description: 'Draw around the product you want to track'
     };
   };
 
@@ -266,30 +254,12 @@ export default function ImageAnnotator({ imageUrl, onConfirm, onCancel, mode = '
       {/* Instructions */}
       <div className="annotator-instructions">
         <div className="instruction-icon">
-          <Highlighter size={20} />
+          <PenLine size={20} />
         </div>
         <div className="instruction-text">
           <h4>{instructions.title}</h4>
           <p>{instructions.description}</p>
         </div>
-      </div>
-
-      {/* Tool selector */}
-      <div className="tool-selector">
-        <button 
-          className={`tool-btn ${tool === 'highlight' ? 'active' : ''}`}
-          onClick={() => setTool('highlight')}
-        >
-          <Highlighter size={18} />
-          <span>Highlight</span>
-        </button>
-        <button 
-          className={`tool-btn ${tool === 'eraser' ? 'active' : ''}`}
-          onClick={() => setTool('eraser')}
-        >
-          <Eraser size={18} />
-          <span>Eraser</span>
-        </button>
       </div>
 
       {/* Canvas container */}
@@ -324,7 +294,7 @@ export default function ImageAnnotator({ imageUrl, onConfirm, onCancel, mode = '
         {/* Visual hint when no drawing yet */}
         {!hasDrawn && dimensions.width > 0 && (
           <div className="draw-hint">
-            <Highlighter size={32} />
+            <PenLine size={32} />
             <span>Draw here</span>
           </div>
         )}
@@ -332,10 +302,7 @@ export default function ImageAnnotator({ imageUrl, onConfirm, onCancel, mode = '
 
       {/* Helper text */}
       <p className="annotator-help">
-        {tool === 'highlight' 
-          ? '👆 Drag your finger to highlight the important area'
-          : '🧽 Drag to erase parts of your highlight'
-        }
+        ✏️ Draw a circle or line around the area you want to mark
       </p>
 
       {/* Actions */}

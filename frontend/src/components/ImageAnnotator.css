@@ -12,7 +12,7 @@
   align-items: flex-start;
   gap: var(--space-md);
   padding: var(--space-md);
-  background: var(--pixel-yellow);
+  background: var(--pixel-peach);
   border: var(--border-width) solid var(--pixel-outline);
   border-radius: var(--border-radius-md);
   box-shadow: var(--shadow-pixel-sm);
@@ -25,10 +25,10 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--pixel-dark);
+  background: #FF6B35;
   border: 2px solid var(--pixel-outline);
   border-radius: var(--border-radius-sm);
-  color: var(--pixel-yellow);
+  color: white;
   flex-shrink: 0;
   box-shadow: var(--shadow-pixel-sm);
   image-rendering: pixelated;
@@ -48,53 +48,6 @@
   color: var(--pixel-dark);
   margin: 0;
   line-height: 1.4;
-}
-
-/* Tool selector */
-.tool-selector {
-  display: flex;
-  gap: var(--space-sm);
-  padding: var(--space-xs);
-  background: var(--bg-secondary);
-  border: var(--border-width) solid var(--pixel-outline);
-  border-radius: var(--border-radius-md);
-  width: fit-content;
-  box-shadow: var(--shadow-pixel-sm);
-  image-rendering: pixelated;
-}
-
-.tool-btn {
-  display: flex;
-  align-items: center;
-  gap: var(--space-xs);
-  padding: var(--space-sm) var(--space-md);
-  background: transparent;
-  border: 2px solid transparent;
-  border-radius: var(--border-radius-sm);
-  color: var(--text-muted);
-  font-family: var(--font-pixel);
-  font-size: var(--font-size-xs);
-  cursor: pointer;
-  transition: all 0.1s ease;
-  text-transform: uppercase;
-  image-rendering: pixelated;
-}
-
-.tool-btn:hover {
-  color: var(--text-primary);
-  background: var(--bg-card);
-  border-color: var(--pixel-outline);
-}
-
-.tool-btn.active {
-  background: var(--pixel-yellow);
-  color: var(--pixel-dark);
-  border-color: var(--pixel-outline);
-  box-shadow: var(--shadow-pixel-sm);
-}
-
-.tool-btn.active:hover {
-  background: var(--pixel-peach);
 }
 
 /* Main annotation container */
@@ -242,16 +195,6 @@
     max-height: 280px;
   }
 
-  .tool-selector {
-    width: 100%;
-    justify-content: center;
-  }
-
-  .tool-btn {
-    flex: 1;
-    justify-content: center;
-  }
-
   .draw-hint {
     padding: var(--space-md);
   }
@@ -287,10 +230,6 @@
   .annotator-container {
     /* Larger touch target */
     min-height: 250px;
-  }
-  
-  .tool-btn {
-    padding: var(--space-md);
   }
   
   .draw-hint {
