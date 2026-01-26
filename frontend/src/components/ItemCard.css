@@ -30,7 +30,7 @@
 .item-image-container {
   position: relative;
   aspect-ratio: 16/12;
-  background: var(--bg-secondary);
+  background: #FFFFFF;
   overflow: hidden;
   border-radius: var(--border-radius-md) var(--border-radius-md) 0 0;
   border-bottom: var(--border-width) solid var(--pixel-outline);
@@ -109,10 +109,14 @@
   font-size: var(--font-size-xs);
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: var(--pixel-lavender);
+  color: var(--pixel-dark);
+  background: var(--pixel-yellow);
+  padding: var(--space-xs) var(--space-sm);
   margin-bottom: var(--space-xs);
   -webkit-text-stroke: 0.5px var(--pixel-black);
   text-shadow: none;
+  border: 1px solid var(--pixel-outline);
+  border-radius: var(--border-radius-sm);
 }
 
 .item-name {
@@ -125,6 +129,7 @@
   -webkit-box-orient: vertical;
   overflow: hidden;
   color: var(--text-primary);
+  letter-spacing: -0.5px;
 }
 
 .item-price-row {
@@ -137,6 +142,7 @@
 .item-current-price {
   font-family: var(--font-pixel);
   font-size: var(--font-size-md);
+  color: #3AB5AD;
 }
 
 .item-original-price {

@@ -66,18 +66,22 @@ export default function Dashboard({ items, alerts, onRefresh, apiBase }) {
     <div className="dashboard-modern">
       {/* Modern Navigation */}
       <nav className="nav-modern">
-        <div className="nav-modern-container">
-          <div className="nav-modern-logo">
-            <Raccoon variant="waving" className="small" />
-            <span className="logo-text-modern">beepbeep.cheap</span>
+        <div className="nav-conveyor-belt">
+          <div className="nav-conveyor-text">
+            BEEP BEEP <span className="conveyor-emoji">🔊</span> CHEEEEEEAP <span className="conveyor-emoji">💰</span> <img src={hyraxImage} alt="hyrax" className="conveyor-mascot" /> BEEP BEEP <span className="conveyor-emoji">🔊</span> CHEEEEEEAP <span className="conveyor-emoji">💰</span> <img src={raccoonImage} alt="raccoon" className="conveyor-mascot" /> BEEP BEEP <span className="conveyor-emoji">🔊</span> CHEEEEEEAP <span className="conveyor-emoji">💰</span> <img src={hyraxImage} alt="hyrax" className="conveyor-mascot" /> BEEP BEEP <span className="conveyor-emoji">🔊</span> CHEEEEEEAP <span className="conveyor-emoji">💰</span> <img src={raccoonImage} alt="raccoon" className="conveyor-mascot" /> BEEP BEEP <span className="conveyor-emoji">🔊</span> CHEEEEEEAP <span className="conveyor-emoji">💰</span>
           </div>
+        </div>
+        <div className="nav-modern-container">
+          <Link to="/" className="nav-modern-logo">
+            <Raccoon variant="waving" className="small" useGif={true} gifSrc={raccoonImage} />
+          </Link>
           <div className="nav-modern-actions">
             <button 
               className="btn-modern btn-modern-icon"
               onClick={() => setShowAlerts(!showAlerts)}
               aria-label="Alerts"
             >
-              <Bell size={20} />
+              <Bell size={16} />
               {alerts.length > 0 && (
                 <span className="badge-modern">{alerts.length}</span>
               )}
@@ -87,14 +91,14 @@ export default function Dashboard({ items, alerts, onRefresh, apiBase }) {
               onClick={handleRefreshAll}
               disabled={refreshing}
             >
-              <RefreshCw size={18} className={refreshing ? 'spinning' : ''} />
+              <RefreshCw size={16} className={refreshing ? 'spinning' : ''} />
               <span>Refresh</span>
             </button>
             <button 
               className="btn-modern btn-modern-primary"
               onClick={() => setShowAddModal(true)}
             >
-              <Plus size={18} />
+              <Plus size={16} />
               <span>Add Item</span>
             </button>
           </div>

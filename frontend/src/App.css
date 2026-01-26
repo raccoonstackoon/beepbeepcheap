@@ -169,6 +169,7 @@ input, textarea {
   transition: all 0.1s ease;
   box-shadow: inset 2px 2px 0px var(--pixel-outline);
   image-rendering: pixelated;
+  letter-spacing: -0.5px;
 }
 
 input:focus, textarea:focus {
