@@ -1,0 +1,110 @@
+/* Pixel Mascot Styles */
+
+.pixel-mascot {
+  display: inline-block;
+  image-rendering: pixelated;
+  image-rendering: -moz-crisp-edges;
+  image-rendering: crisp-edges;
+}
+
+.mascot-svg {
+  image-rendering: pixelated;
+  image-rendering: -moz-crisp-edges;
+  image-rendering: crisp-edges;
+}
+
+/* Hyrax Animations */
+.hyrax {
+  animation: hyrax-idle 2s ease-in-out infinite;
+}
+
+.hyrax-smiling .mascot-svg circle {
+  animation: blink 3s ease-in-out infinite;
+}
+
+.hyrax-blinking {
+  animation: hyrax-idle 2s ease-in-out infinite, blink 4s ease-in-out infinite;
+}
+
+@keyframes hyrax-idle {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-2px); }
+}
+
+/* Raccoon Animations */
+.raccoon {
+  animation: raccoon-idle 1.5s ease-in-out infinite;
+}
+
+.raccoon-waving .waving-paw {
+  animation: wave 1s ease-in-out infinite;
+  transform-origin: 52px 23px;
+}
+
+.raccoon-tail {
+  animation: tail-sway 2s ease-in-out infinite;
+  transform-origin: 44px 43px;
+}
+
+@keyframes raccoon-idle {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  25% { transform: translateY(-2px) rotate(1deg); }
+  75% { transform: translateY(-2px) rotate(-1deg); }
+}
+
+@keyframes wave {
+  0%, 100% { transform: rotate(-20deg); }
+  50% { transform: rotate(20deg); }
+}
+
+/* Mascot Sizes */
+.pixel-mascot.small {
+  width: 32px;
+  height: 32px;
+}
+
+.pixel-mascot.small svg {
+  width: 32px;
+  height: 32px;
+}
+
+.pixel-mascot.medium {
+  width: 64px;
+  height: 64px;
+}
+
+.pixel-mascot.large {
+  width: 96px;
+  height: 96px;
+}
+
+.pixel-mascot.large svg {
+  width: 96px;
+  height: 96px;
+}
+
+/* Mascot Positions */
+.pixel-mascot.corner {
+  position: absolute;
+  z-index: 10;
+}
+
+.pixel-mascot.corner.top-left {
+  top: 8px;
+  left: 8px;
+}
+
+.pixel-mascot.corner.top-right {
+  top: 8px;
+  right: 8px;
+}
+
+.pixel-mascot.corner.bottom-left {
+  bottom: 8px;
+  left: 8px;
+}
+
+.pixel-mascot.corner.bottom-right {
+  bottom: 8px;
+  right: 8px;
+}

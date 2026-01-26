@@ -1,25 +1,35 @@
+/* Retro Pixel Price Chart */
+
 .price-chart {
   padding: var(--space-md) 0;
+  background: var(--bg-card);
+  border: var(--border-width) solid var(--pixel-outline);
+  border-radius: var(--border-radius-md);
+  padding: var(--space-lg);
+  box-shadow: var(--shadow-pixel-sm);
+  image-rendering: pixelated;
 }
 
 .chart-tooltip {
   background: var(--bg-card);
-  border: 1px solid var(--border-medium);
-  border-radius: var(--radius-md);
+  border: var(--border-width) solid var(--pixel-outline);
+  border-radius: var(--border-radius-sm);
   padding: var(--space-sm) var(--space-md);
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-pixel);
+  font-family: var(--font-pixel);
+  image-rendering: pixelated;
 }
 
 .tooltip-price {
-  font-family: var(--font-display);
-  font-size: 1.25rem;
-  font-weight: 600;
-  color: var(--accent-mint);
-  margin-bottom: 2px;
+  font-family: var(--font-pixel);
+  font-size: var(--font-size-sm);
+  color: var(--pixel-mint);
+  margin-bottom: var(--space-xs);
 }
 
 .tooltip-date {
-  font-size: 0.8rem;
+  font-family: var(--font-pixel);
+  font-size: var(--font-size-xs);
   color: var(--text-muted);
 }
 
@@ -29,30 +39,27 @@
   gap: var(--space-lg);
   margin-top: var(--space-md);
   padding-top: var(--space-md);
-  border-top: 1px solid var(--border-subtle);
+  border-top: var(--border-width) solid var(--pixel-outline);
+  flex-wrap: wrap;
 }
 
 .legend-item {
   display: flex;
   align-items: center;
   gap: var(--space-sm);
-  font-size: 0.85rem;
+  font-family: var(--font-pixel);
+  font-size: var(--font-size-xs);
   color: var(--text-secondary);
 }
 
 .legend-line {
-  width: 20px;
-  height: 2px;
-  border-radius: 1px;
+  width: 24px;
+  height: 3px;
+  border: 1px solid var(--pixel-outline);
+  image-rendering: pixelated;
 }
 
 .legend-line.lowest {
-  background: var(--accent-mint);
+  background: var(--pixel-mint);
   border-style: dashed;
 }
-
-
-
-
-
-

@@ -1,68 +1,108 @@
+/* 16-Bit Retro Design System - Playful & Joyful */
+
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  image-rendering: pixelated;
+  image-rendering: -moz-crisp-edges;
+  image-rendering: crisp-edges;
+}
+
 :root {
-  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
-
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
-
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
-}
-a:hover {
-  color: #535bf2;
+  /* 16-Bit Color Palette */
+  --pixel-teal: #4ECDC4;
+  --pixel-sky-blue: #87CEEB;
+  --pixel-peach: #FFB6C1;
+  --pixel-yellow: #FFD700;
+  --pixel-mint: #98FB98;
+  --pixel-lavender: #E6E6FA;
+  --pixel-dark: #2C3E50;
+  --pixel-darker: #1A1A2E;
+  --pixel-white: #FFFFFF;
+  --pixel-black: #000000;
+  --pixel-outline: #1A1A2E;
+  
+  /* Background colors */
+  --bg-primary: #E8F4F8;
+  --bg-secondary: #D4E8F0;
+  --bg-card: #FFFFFF;
+  --bg-card-hover: #F0F8FF;
+  
+  /* Text colors */
+  --text-primary: #2C3E50;
+  --text-secondary: #5A7A9A;
+  --text-muted: #8FA5B8;
+  
+  /* Accent colors */
+  --accent-success: var(--pixel-mint);
+  --accent-warning: var(--pixel-yellow);
+  --accent-danger: #FF6B6B;
+  --accent-info: var(--pixel-sky-blue);
+  
+  /* Spacing (pixel-perfect) */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+  --space-2xl: 48px;
+  
+  /* Pixel font */
+  --font-pixel: 'Press Start 2P', monospace;
+  --font-size-xs: 8px;
+  --font-size-sm: 10px;
+  --font-size-base: 12px;
+  --font-size-md: 14px;
+  --font-size-lg: 16px;
+  --font-size-xl: 20px;
+  --font-size-2xl: 24px;
+  
+  /* Borders */
+  --border-width: 3px;
+  --border-radius-sm: 4px;
+  --border-radius-md: 8px;
+  --border-radius-lg: 12px;
+  
+  /* Shadows (pixel-style) */
+  --shadow-pixel: 4px 4px 0px var(--pixel-outline);
+  --shadow-pixel-sm: 2px 2px 0px var(--pixel-outline);
+  --shadow-pixel-lg: 6px 6px 0px var(--pixel-outline);
 }
 
 body {
   margin: 0;
-  display: flex;
-  place-items: center;
   min-width: 320px;
   min-height: 100vh;
+  font-family: var(--font-pixel);
+  font-size: var(--font-size-base);
+  color: var(--text-primary);
+  line-height: 1.6;
+  /* Disable font smoothing for pixel-perfect rendering */
+  -webkit-font-smoothing: none;
+  -moz-osx-font-smoothing: unset;
+  text-rendering: optimizeSpeed;
+  /* Subtle square grid background */
+  background-color: var(--bg-primary);
+  background-image: 
+    linear-gradient(rgba(90, 122, 154, 0.15) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(90, 122, 154, 0.15) 1px, transparent 1px);
+  background-size: 24px 24px;
+  background-position: 0 0, 0 0;
 }
 
-h1 {
-  font-size: 3.2em;
-  line-height: 1.1;
+#root {
+  min-height: 100vh;
+  width: 100%;
 }
 
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  background-color: #1a1a1a;
-  cursor: pointer;
-  transition: border-color 0.25s;
-}
-button:hover {
-  border-color: #646cff;
-}
-button:focus,
-button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
+/* Pixel cursor */
+* {
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16'%3E%3Crect x='0' y='0' width='16' height='16' fill='%232C3E50'/%3E%3Crect x='2' y='2' width='12' height='12' fill='%23FFD700'/%3E%3Crect x='4' y='4' width='8' height='8' fill='%23FFFFFF'/%3E%3C/svg%3E") 8 8, auto;
 }
 
-@media (prefers-color-scheme: light) {
-  :root {
-    color: #213547;
-    background-color: #ffffff;
-  }
-  a:hover {
-    color: #747bff;
-  }
-  button {
-    background-color: #f9f9f9;
-  }
+button, a, input, textarea, select {
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16'%3E%3Crect x='0' y='0' width='16' height='16' fill='%232C3E50'/%3E%3Crect x='2' y='2' width='12' height='12' fill='%234ECDC4'/%3E%3Crect x='4' y='4' width='8' height='8' fill='%23FFFFFF'/%3E%3C/svg%3E") 8 8, pointer;
 }

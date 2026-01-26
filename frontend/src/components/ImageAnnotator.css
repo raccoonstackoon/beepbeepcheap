@@ -1,3 +1,5 @@
+/* Retro Pixel Image Annotator */
+
 .image-annotator {
   display: flex;
   flex-direction: column;
@@ -10,33 +12,40 @@
   align-items: flex-start;
   gap: var(--space-md);
   padding: var(--space-md);
-  background: linear-gradient(135deg, var(--accent-gold-soft) 0%, rgba(255, 200, 87, 0.05) 100%);
-  border: 1px solid rgba(255, 200, 87, 0.3);
-  border-radius: var(--radius-md);
+  background: var(--pixel-yellow);
+  border: var(--border-width) solid var(--pixel-outline);
+  border-radius: var(--border-radius-md);
+  box-shadow: var(--shadow-pixel-sm);
+  image-rendering: pixelated;
 }
 
 .instruction-icon {
-  width: 40px;
-  height: 40px;
+  width: 32px;
+  height: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--accent-gold-soft);
-  border-radius: var(--radius-sm);
-  color: var(--accent-gold);
+  background: var(--pixel-dark);
+  border: 2px solid var(--pixel-outline);
+  border-radius: var(--border-radius-sm);
+  color: var(--pixel-yellow);
   flex-shrink: 0;
+  box-shadow: var(--shadow-pixel-sm);
+  image-rendering: pixelated;
 }
 
 .instruction-text h4 {
-  font-size: 0.95rem;
-  font-weight: 600;
-  color: var(--text-primary);
+  font-family: var(--font-pixel);
+  font-size: var(--font-size-xs);
+  color: var(--pixel-dark);
   margin-bottom: var(--space-xs);
+  text-transform: uppercase;
 }
 
 .instruction-text p {
-  font-size: 0.85rem;
-  color: var(--text-secondary);
+  font-family: var(--font-pixel);
+  font-size: var(--font-size-xs);
+  color: var(--pixel-dark);
   margin: 0;
   line-height: 1.4;
 }
@@ -47,8 +56,11 @@
   gap: var(--space-sm);
   padding: var(--space-xs);
   background: var(--bg-secondary);
-  border-radius: var(--radius-md);
+  border: var(--border-width) solid var(--pixel-outline);
+  border-radius: var(--border-radius-md);
   width: fit-content;
+  box-shadow: var(--shadow-pixel-sm);
+  image-rendering: pixelated;
 }
 
 .tool-btn {
@@ -57,38 +69,46 @@
   gap: var(--space-xs);
   padding: var(--space-sm) var(--space-md);
   background: transparent;
-  border: none;
-  border-radius: var(--radius-sm);
+  border: 2px solid transparent;
+  border-radius: var(--border-radius-sm);
   color: var(--text-muted);
-  font-size: 0.85rem;
-  font-weight: 500;
+  font-family: var(--font-pixel);
+  font-size: var(--font-size-xs);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.1s ease;
+  text-transform: uppercase;
+  image-rendering: pixelated;
 }
 
 .tool-btn:hover {
   color: var(--text-primary);
   background: var(--bg-card);
+  border-color: var(--pixel-outline);
 }
 
 .tool-btn.active {
-  background: var(--accent-gold);
-  color: var(--bg-primary);
+  background: var(--pixel-yellow);
+  color: var(--pixel-dark);
+  border-color: var(--pixel-outline);
+  box-shadow: var(--shadow-pixel-sm);
 }
 
 .tool-btn.active:hover {
-  background: #e6b34e;
+  background: var(--pixel-peach);
 }
 
 /* Main annotation container */
 .annotator-container {
   position: relative;
-  border-radius: var(--radius-lg);
+  border-radius: var(--border-radius-md);
   overflow: hidden;
   background: var(--bg-secondary);
+  border: var(--border-width) solid var(--pixel-outline);
   user-select: none;
   touch-action: none;
   cursor: crosshair;
+  box-shadow: var(--shadow-pixel-sm);
+  image-rendering: pixelated;
 }
 
 .annotator-image {
@@ -97,6 +117,9 @@
   max-height: 350px;
   object-fit: contain;
   pointer-events: none;
+  image-rendering: pixelated;
+  image-rendering: -moz-crisp-edges;
+  image-rendering: crisp-edges;
 }
 
 /* Canvas overlay for drawing */
@@ -108,6 +131,7 @@
   height: 100%;
   cursor: crosshair;
   touch-action: none;
+  image-rendering: pixelated;
 }
 
 /* Draw hint overlay */
@@ -121,21 +145,25 @@
   align-items: center;
   gap: var(--space-sm);
   padding: var(--space-lg) var(--space-xl);
-  background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(4px);
-  border-radius: var(--radius-lg);
-  color: var(--accent-gold);
+  background: var(--pixel-dark);
+  border: var(--border-width) solid var(--pixel-outline);
+  border-radius: var(--border-radius-md);
+  color: var(--pixel-yellow);
   pointer-events: none;
-  animation: pulse-hint 2s ease-in-out infinite;
+  animation: pixel-pulse-hint 2s ease-in-out infinite;
+  box-shadow: var(--shadow-pixel);
+  image-rendering: pixelated;
 }
 
 .draw-hint span {
-  font-size: 0.9rem;
-  font-weight: 500;
-  color: var(--text-primary);
+  font-family: var(--font-pixel);
+  font-size: var(--font-size-xs);
+  color: var(--pixel-yellow);
+  text-transform: uppercase;
+  text-shadow: 1px 1px 0px var(--pixel-outline);
 }
 
-@keyframes pulse-hint {
+@keyframes pixel-pulse-hint {
   0%, 100% {
     opacity: 0.9;
     transform: translate(-50%, -50%) scale(1);
@@ -152,7 +180,8 @@
   align-items: center;
   justify-content: center;
   gap: var(--space-sm);
-  font-size: 0.85rem;
+  font-family: var(--font-pixel);
+  font-size: var(--font-size-xs);
   color: var(--text-secondary);
   text-align: center;
   padding: var(--space-xs) 0;
@@ -164,7 +193,7 @@
   justify-content: space-between;
   align-items: center;
   padding-top: var(--space-md);
-  border-top: 1px solid var(--border-subtle);
+  border-top: var(--border-width) solid var(--pixel-outline);
 }
 
 .action-group {
@@ -179,13 +208,17 @@
   bottom: var(--space-sm);
   right: var(--space-sm);
   padding: var(--space-xs) var(--space-sm);
-  background: rgba(0, 0, 0, 0.6);
-  border-radius: var(--radius-sm);
-  font-size: 0.75rem;
-  color: var(--text-muted);
+  background: var(--pixel-dark);
+  border: 2px solid var(--pixel-outline);
+  border-radius: var(--border-radius-sm);
+  font-family: var(--font-pixel);
+  font-size: var(--font-size-xs);
+  color: var(--pixel-yellow);
   pointer-events: none;
   opacity: 0;
   transition: opacity 0.2s;
+  box-shadow: var(--shadow-pixel-sm);
+  image-rendering: pixelated;
 }
 
 .annotator-container:active::after {
@@ -223,11 +256,11 @@
   }
 
   .draw-hint span {
-    font-size: 0.8rem;
+    font-size: var(--font-size-xs);
   }
 
   .annotator-help {
-    font-size: 0.8rem;
+    font-size: var(--font-size-xs);
   }
 
   .annotator-actions {
@@ -260,6 +293,6 @@
   }
   
   .draw-hint {
-    font-size: 1rem;
+    font-size: var(--font-size-sm);
   }
 }

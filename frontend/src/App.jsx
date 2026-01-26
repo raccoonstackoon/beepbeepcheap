@@ -47,9 +47,9 @@ function App() {
   if (loading) {
     return (
       <div className="loading-screen">
-        <div className="loading-logo">🚗💨</div>
+        <div className="loading-logo">🌙</div>
         <div className="loading-spinner"></div>
-        <p>beepbeep.cheap</p>
+        <p>✨ beepbeep.cheap ✨</p>
       </div>
     );
   }

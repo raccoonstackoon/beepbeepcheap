@@ -12,11 +12,13 @@ import {
   Package,
   X,
   Check,
-  ExternalLink
+  ExternalLink,
+  Sparkles
 } from 'lucide-react';
 import ItemCard from '../components/ItemCard';
 import AddItemModal from '../components/AddItemModal';
 import AlertBanner from '../components/AlertBanner';
+import { Hyrax, Raccoon } from '../components/PixelMascot';
 import './Dashboard.css';
 
 export default function Dashboard({ items, alerts, onRefresh, apiBase }) {
@@ -58,57 +60,106 @@ export default function Dashboard({ items, alerts, onRefresh, apiBase }) {
   }, 0);
 
   return (
-    <div className="dashboard">
-      {/* Header */}
-      <header className="dashboard-header">
-        <div className="header-left">
-          <h1><span className="logo-emoji">🚗</span> beepbeep.cheap</h1>
-          <p className="subtitle">Honk if you love deals! 📣</p>
+    <div className="dashboard-modern">
+      {/* Modern Navigation */}
+      <nav className="nav-modern">
+        <div className="nav-modern-container">
+          <div className="nav-modern-logo">
+            <Raccoon variant="waving" className="small" />
+            <span className="logo-text-modern">beepbeep.cheap</span>
+          </div>
+          <div className="nav-modern-actions">
+            <button 
+              className="btn-modern btn-modern-icon"
+              onClick={() => setShowAlerts(!showAlerts)}
+              aria-label="Alerts"
+            >
+              <Bell size={20} />
+              {alerts.length > 0 && (
+                <span className="badge-modern">{alerts.length}</span>
+              )}
+            </button>
+            <button 
+              className="btn-modern btn-modern-secondary"
+              onClick={handleRefreshAll}
+              disabled={refreshing}
+            >
+              <RefreshCw size={18} className={refreshing ? 'spinning' : ''} />
+              <span>Refresh</span>
+            </button>
+            <button 
+              className="btn-modern btn-modern-primary"
+              onClick={() => setShowAddModal(true)}
+            >
+              <Plus size={18} />
+              <span>Add Item</span>
+            </button>
+          </div>
         </div>
-        <div className="header-actions">
-          <button 
-            className="btn btn-ghost btn-icon alert-btn"
-            onClick={() => setShowAlerts(!showAlerts)}
-          >
-            <Bell size={20} />
-            {alerts.length > 0 && (
-              <span className="alert-count">{alerts.length}</span>
-            )}
-          </button>
-          <button 
-            className="btn btn-secondary"
-            onClick={handleRefreshAll}
-            disabled={refreshing}
-          >
-            <RefreshCw size={18} className={refreshing ? 'spinning' : ''} />
-            {refreshing ? 'Checking...' : 'Check Prices'}
-          </button>
-          <button 
-            className="btn btn-primary"
-            onClick={() => setShowAddModal(true)}
-          >
-            <Plus size={18} />
-            Add Item
-          </button>
-        </div>
-      </header>
+      </nav>
 
-      {/* Alert dropdown */}
+      {/* Hero Section - Retro Game Menu */}
+      <section className="hero-modern">
+        <div className="hero-modern-background">
+          <div className="gradient-orb gradient-orb-1"></div>
+          <div className="gradient-orb gradient-orb-2"></div>
+          <div className="gradient-orb gradient-orb-3"></div>
+        </div>
+        <div className="hero-modern-content">
+          <div className="hero-badge">
+            <span>⭐</span>
+            <span>Price Tracking Made Simple</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '16px', marginBottom: '16px' }}>
+            <Hyrax variant="smiling" className="medium" />
+            <h1 className="hero-title-modern">
+              Never Miss a<br />
+              <span className="gradient-text">Great Deal</span>
+            </h1>
+            <Raccoon variant="waving" className="medium" />
+          </div>
+          <p className="hero-description">
+            Track prices, get alerts, and save money on your favorite products.
+            Smart shopping starts here.
+          </p>
+          <div className="hero-stats-modern">
+            <div className="hero-stat-item">
+              <div className="hero-stat-value">{totalItems}</div>
+              <div className="hero-stat-label">Items Tracked</div>
+            </div>
+            <div className="hero-stat-divider"></div>
+            <div className="hero-stat-item">
+              <div className="hero-stat-value">{itemsWithDrops}</div>
+              <div className="hero-stat-label">Price Drops</div>
+            </div>
+            <div className="hero-stat-divider"></div>
+            <div className="hero-stat-item">
+              <div className="hero-stat-value">£{totalSavings.toFixed(2)}</div>
+              <div className="hero-stat-label">Saved</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Alerts Section */}
       {showAlerts && (
-        <div className="alerts-dropdown fade-in">
-          <div className="alerts-header">
-            <h3>Price Alerts</h3>
+        <div className="alerts-modern fade-in">
+          <div className="alerts-modern-header">
+            <h3 className="alerts-modern-title">Price Alerts</h3>
             {alerts.length > 0 && (
-              <button className="btn btn-ghost" onClick={handleMarkAllRead}>
+              <button className="btn-modern btn-modern-ghost" onClick={handleMarkAllRead}>
                 <Check size={16} />
-                Mark all read
+                <span>Mark All Read</span>
               </button>
             )}
           </div>
           {alerts.length === 0 ? (
-            <p className="alerts-empty">No new alerts</p>
+            <div className="alerts-empty-modern">
+              <Bell size={48} />
+              <p>No new alerts</p>
+            </div>
           ) : (
-            <div className="alerts-list">
+            <div className="alerts-list-modern">
               {alerts.map(alert => (
                 <AlertBanner key={alert.id} alert={alert} apiBase={apiBase} onDismiss={onRefresh} />
               ))}
@@ -117,49 +168,64 @@ export default function Dashboard({ items, alerts, onRefresh, apiBase }) {
         </div>
       )}
 
-      {/* Stats bar */}
-      <div className="stats-bar">
-        <div className="stat-card">
-          <Package size={24} className="stat-icon" />
-          <div className="stat-content">
-            <span className="stat-value">{totalItems}</span>
-            <span className="stat-label">Items Tracked</span>
+      {/* Stats Cards - Glassmorphism */}
+      <section className="stats-modern">
+        <div className="stats-modern-grid">
+          <div className="stat-card-modern">
+            <div className="stat-card-icon">
+              <Package size={28} />
+            </div>
+            <div className="stat-card-content">
+              <div className="stat-card-value">{totalItems}</div>
+              <div className="stat-card-label">Items Tracked</div>
+            </div>
+          </div>
+          <div className="stat-card-modern stat-card-modern-accent">
+            <div className="stat-card-icon stat-card-icon-accent">
+              <TrendingDown size={28} />
+            </div>
+            <div className="stat-card-content">
+              <div className="stat-card-value">{itemsWithDrops}</div>
+              <div className="stat-card-label">Price Drops</div>
+            </div>
+          </div>
+          <div className="stat-card-modern">
+            <div className="stat-card-icon stat-card-icon-gold">
+              <span className="stat-icon-currency">£</span>
+            </div>
+            <div className="stat-card-content">
+              <div className="stat-card-value">£{totalSavings.toFixed(2)}</div>
+              <div className="stat-card-label">Potential Savings</div>
+            </div>
           </div>
         </div>
-        <div className="stat-card">
-          <TrendingDown size={24} className="stat-icon mint" />
-          <div className="stat-content">
-            <span className="stat-value">{itemsWithDrops}</span>
-            <span className="stat-label">Price Drops</span>
-          </div>
-        </div>
-        <div className="stat-card">
-          <span className="stat-icon-text">£</span>
-          <div className="stat-content">
-            <span className="stat-value">£{totalSavings.toFixed(2)}</span>
-            <span className="stat-label">Potential Savings</span>
-          </div>
-        </div>
-      </div>
+      </section>
 
-      {/* Items grid */}
-      <main className="dashboard-main">
+      {/* Items Grid */}
+      <main className="main-modern">
+        <div className="section-header-modern">
+          <h2 className="section-title-modern">Your Tracked Items</h2>
+          <p className="section-subtitle-modern">Monitor prices and get notified of changes</p>
+        </div>
         {items.length === 0 ? (
-          <div className="empty-state">
-            <div className="empty-icon">
-              <Package size={64} />
+          <div className="empty-state-modern">
+            <div className="empty-state-icon">
+              <Hyrax variant="blinking" className="large" />
             </div>
-            <h2>No items yet</h2>
-            <p>Start tracking prices by adding your first item</p>
-            <div className="empty-actions">
-              <button className="btn btn-primary" onClick={() => setShowAddModal(true)}>
-                <Plus size={18} />
-                Add Your First Item
-              </button>
-            </div>
+            <h3 className="empty-state-title">Start Tracking Prices</h3>
+            <p className="empty-state-text">
+              Add your first item to begin monitoring prices and saving money
+            </p>
+            <button 
+              className="btn-modern btn-modern-primary btn-modern-large"
+              onClick={() => setShowAddModal(true)}
+            >
+              <Plus size={16} />
+              <span>Add Your First Item</span>
+            </button>
           </div>
         ) : (
-          <div className="items-grid">
+          <div className="items-grid-modern">
             {items.map((item, index) => (
               <ItemCard 
                 key={item.id} 
@@ -187,4 +253,3 @@ export default function Dashboard({ items, alerts, onRefresh, apiBase }) {
     </div>
   );
 }
-
