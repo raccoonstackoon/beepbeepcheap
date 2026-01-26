@@ -1,15 +1,13 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { 
   Plus, 
   Bell, 
   RefreshCw, 
-  TrendingDown, 
   TrendingUp, 
   Minus,
   Link as LinkIcon,
   Camera,
-  Package,
   X,
   Check,
   ExternalLink,
@@ -28,6 +26,7 @@ export default function Dashboard({ items, alerts, onRefresh, apiBase }) {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showAlerts, setShowAlerts] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [fallingMascots, setFallingMascots] = useState([]);
 
   const handleRefreshAll = async () => {
     setRefreshing(true);
@@ -52,6 +51,42 @@ export default function Dashboard({ items, alerts, onRefresh, apiBase }) {
     }
   };
 
+  // Create falling mascots randomly
+  useEffect(() => {
+    const createFallingMascot = () => {
+      const mascotType = Math.random() > 0.5 ? 'hyrax' : 'raccoon';
+      const leftPosition = Math.random() * 100; // Random horizontal position (0-100%)
+      const delay = Math.random() * 2; // Random delay (0-2s)
+      const duration = 3 + Math.random() * 2; // Random duration (3-5s)
+      const size = 40 + Math.random() * 30; // Random size (40-70px)
+      
+      const mascot = {
+        id: Date.now() + Math.random(),
+        type: mascotType,
+        left: leftPosition,
+        delay,
+        duration,
+        size
+      };
+      
+      setFallingMascots(prev => [...prev, mascot]);
+      
+      // Remove mascot after animation completes
+      setTimeout(() => {
+        setFallingMascots(prev => prev.filter(m => m.id !== mascot.id));
+      }, (delay + duration) * 1000);
+    };
+
+    // Create a mascot every 2-5 seconds
+    const interval = setInterval(() => {
+      if (Math.random() > 0.3) { // 70% chance to create a mascot
+        createFallingMascot();
+      }
+    }, 2000 + Math.random() * 3000);
+
+    return () => clearInterval(interval);
+  }, []);
+
   // Calculate stats
   const totalItems = items.length;
   const itemsWithDrops = items.filter(i => i.current_price && i.original_price && i.current_price < i.original_price).length;
@@ -64,11 +99,32 @@ export default function Dashboard({ items, alerts, onRefresh, apiBase }) {
 
   return (
     <div className="dashboard-modern">
+      {/* Falling Mascots */}
+      {fallingMascots.map(mascot => (
+        <div
+          key={mascot.id}
+          className="falling-mascot"
+          style={{
+            left: `${mascot.left}%`,
+            animationDelay: `${mascot.delay}s`,
+            animationDuration: `${mascot.duration}s`,
+            width: `${mascot.size}px`,
+            height: `${mascot.size}px`
+          }}
+        >
+          <img
+            src={mascot.type === 'hyrax' ? hyraxImage : raccoonImage}
+            alt={mascot.type}
+            className="falling-mascot-img"
+          />
+        </div>
+      ))}
+      
       {/* Modern Navigation */}
       <nav className="nav-modern">
         <div className="nav-conveyor-belt">
           <div className="nav-conveyor-text">
-            BEEP BEEP <span className="conveyor-emoji">🔊</span> CHEEEEEEAP <span className="conveyor-emoji">💰</span> <img src={hyraxImage} alt="hyrax" className="conveyor-mascot" /> BEEP BEEP <span className="conveyor-emoji">🔊</span> CHEEEEEEAP <span className="conveyor-emoji">💰</span> <img src={raccoonImage} alt="raccoon" className="conveyor-mascot" /> BEEP BEEP <span className="conveyor-emoji">🔊</span> CHEEEEEEAP <span className="conveyor-emoji">💰</span> <img src={hyraxImage} alt="hyrax" className="conveyor-mascot" /> BEEP BEEP <span className="conveyor-emoji">🔊</span> CHEEEEEEAP <span className="conveyor-emoji">💰</span> <img src={raccoonImage} alt="raccoon" className="conveyor-mascot" /> BEEP BEEP <span className="conveyor-emoji">🔊</span> CHEEEEEEAP <span className="conveyor-emoji">💰</span>
+            SNOOP THAT PRICE DROP LIKE ITS HOT <img src={hyraxImage} alt="hyrax" className="conveyor-mascot" /> SNOOP THAT PRICE DROP LIKE ITS HOT <img src={raccoonImage} alt="raccoon" className="conveyor-mascot" /> SNOOP THAT PRICE DROP LIKE ITS HOT <img src={hyraxImage} alt="hyrax" className="conveyor-mascot" /> SNOOP THAT PRICE DROP LIKE ITS HOT <img src={raccoonImage} alt="raccoon" className="conveyor-mascot" /> SNOOP THAT PRICE DROP LIKE ITS HOT <img src={hyraxImage} alt="hyrax" className="conveyor-mascot" /> SNOOP THAT PRICE DROP LIKE ITS HOT <img src={raccoonImage} alt="raccoon" className="conveyor-mascot" /> SNOOP THAT PRICE DROP LIKE ITS HOT <img src={hyraxImage} alt="hyrax" className="conveyor-mascot" /> SNOOP THAT PRICE DROP LIKE ITS HOT <img src={raccoonImage} alt="raccoon" className="conveyor-mascot" />
           </div>
         </div>
         <div className="nav-modern-container">
@@ -105,28 +161,6 @@ export default function Dashboard({ items, alerts, onRefresh, apiBase }) {
         </div>
       </nav>
 
-      {/* Hero Section - Retro Game Menu */}
-      <section className="hero-modern">
-        <div className="hero-modern-content">
-          <div className="hero-badge">
-            <span>⭐</span>
-            <span>Price Tracking Made Simple</span>
-          </div>
-          <div className="hero-title-wrapper">
-            <Hyrax variant="smiling" className="medium" useGif={hyraxImage !== null} gifSrc={hyraxImage} />
-            <h1 className="hero-title-modern">
-              Never Miss a<br />
-              <span className="gradient-text">Great Deal</span>
-            </h1>
-            <Raccoon variant="waving" className="medium" useGif={true} gifSrc={raccoonImage} />
-          </div>
-          <p className="hero-description">
-            Track prices, get alerts, and save money on your favorite products.
-            Smart shopping starts here.
-          </p>
-        </div>
-      </section>
-
       {/* Alerts Section */}
       {showAlerts && (
         <div className="alerts-modern fade-in">
@@ -158,30 +192,21 @@ export default function Dashboard({ items, alerts, onRefresh, apiBase }) {
       <section className="stats-modern">
         <div className="stats-modern-grid">
           <div className="stat-card-modern">
-            <div className="stat-card-icon">
-              <Package size={20} />
-            </div>
             <div className="stat-card-content">
               <div className="stat-card-value">{totalItems}</div>
-              <div className="stat-card-label">Items Tracked</div>
+              <div className="stat-card-label">ITEMS</div>
             </div>
           </div>
           <div className="stat-card-modern stat-card-modern-accent">
-            <div className="stat-card-icon stat-card-icon-accent">
-              <TrendingDown size={20} />
-            </div>
             <div className="stat-card-content">
               <div className="stat-card-value">{itemsWithDrops}</div>
-              <div className="stat-card-label">Price Drops</div>
+              <div className="stat-card-label">DROPS</div>
             </div>
           </div>
           <div className="stat-card-modern">
-            <div className="stat-card-icon stat-card-icon-gold">
-              <span className="stat-icon-currency">£</span>
-            </div>
             <div className="stat-card-content">
               <div className="stat-card-value">£{totalSavings.toFixed(2)}</div>
-              <div className="stat-card-label">Potential Savings</div>
+              <div className="stat-card-label">SAVINGS</div>
             </div>
           </div>
         </div>
@@ -189,6 +214,15 @@ export default function Dashboard({ items, alerts, onRefresh, apiBase }) {
 
       {/* Items Grid */}
       <main className="main-modern">
+        <div className="cta-banner">
+          <button 
+            className="btn-rainbow"
+            onClick={() => setShowAddModal(true)}
+          >
+            <Sparkles size={16} />
+            <span>Track a New Item</span>
+          </button>
+        </div>
         <div className="section-header-modern">
           <h2 className="section-title-modern">Your Tracked Items</h2>
           <p className="section-subtitle-modern">Monitor prices and get notified of changes</p>

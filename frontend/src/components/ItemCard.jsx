@@ -96,6 +96,54 @@ export default function ItemCard({ item, apiBase, onRefresh, style }) {
             {Math.abs(priceChange)}%
           </div>
         )}
+
+        {/* Card Actions - Top Right */}
+        <div className="card-actions-overlay">
+          {item.url && (
+            <button 
+              className="btn-modern btn-modern-icon"
+              onClick={handleRefresh}
+              disabled={refreshing}
+              title="Refresh price"
+            >
+              <RefreshCw size={14} className={refreshing ? 'spinning' : ''} />
+            </button>
+          )}
+          
+          <div className="menu-container" ref={menuRef}>
+            <button 
+              className="btn-modern btn-modern-icon"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setShowMenu(!showMenu);
+              }}
+            >
+              <MoreVertical size={14} />
+            </button>
+            
+            {showMenu && (
+              <div className="menu-dropdown" onClick={(e) => e.stopPropagation()}>
+                {item.url && (
+                  <a 
+                    href={item.url} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="menu-item"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <ExternalLink size={14} />
+                    Open in store
+                  </a>
+                )}
+                <button className="menu-item danger" onClick={handleDelete}>
+                  <Trash2 size={14} />
+                  Delete
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Content */}
@@ -120,54 +168,6 @@ export default function ItemCard({ item, apiBase, onRefresh, style }) {
         {item.lowest_price && item.current_price === item.lowest_price && (
           <span className="lowest-badge">Lowest price!</span>
         )}
-      </div>
-
-      {/* Actions */}
-      <div className="item-actions">
-        {item.url && (
-          <button 
-            className="btn btn-ghost btn-icon"
-            onClick={handleRefresh}
-            disabled={refreshing}
-            title="Refresh price"
-          >
-            <RefreshCw size={16} className={refreshing ? 'spinning' : ''} />
-          </button>
-        )}
-        
-        <div className="menu-container" ref={menuRef}>
-          <button 
-            className="btn btn-ghost btn-icon"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              setShowMenu(!showMenu);
-            }}
-          >
-            <MoreVertical size={16} />
-          </button>
-          
-          {showMenu && (
-            <div className="menu-dropdown" onClick={(e) => e.stopPropagation()}>
-              {item.url && (
-                <a 
-                  href={item.url} 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="menu-item"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <ExternalLink size={14} />
-                  Open in store
-                </a>
-              )}
-              <button className="menu-item danger" onClick={handleDelete}>
-                <Trash2 size={14} />
-                Delete
-              </button>
-            </div>
-          )}
-        </div>
       </div>
     </Link>
   );
