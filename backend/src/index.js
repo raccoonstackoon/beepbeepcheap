@@ -19,14 +19,15 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 // Middleware
+// Allow all origins in development for local network testing (phone, tablet, etc.)
 app.use(cors({
-  origin: [
-    'http://localhost:5173',
-    'http://localhost:3001',
-    'https://beepbeep.cheap',
-    'https://www.beepbeep.cheap',
-    process.env.FRONTEND_URL
-  ].filter(Boolean),
+  origin: process.env.NODE_ENV === 'production' 
+    ? [
+        'https://beepbeep.cheap',
+        'https://www.beepbeep.cheap',
+        process.env.FRONTEND_URL
+      ].filter(Boolean)
+    : true, // Allow all origins in development
   credentials: true
 }));
 app.use(express.json());
@@ -65,9 +66,10 @@ if (process.env.NODE_ENV === 'production') {
   });
 }
 
-// Start server
-app.listen(PORT, () => {
+// Start server - listen on 0.0.0.0 to allow connections from other devices on the network
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚗 beepbeep.cheap running on port ${PORT}`);
+  console.log(`📱 Accessible on your local network at http://<your-ip>:${PORT}`);
   
   // Start the daily price check scheduler
   startScheduler();

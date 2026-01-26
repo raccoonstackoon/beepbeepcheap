@@ -209,6 +209,7 @@
 
 .menu-dropdown {
   position: absolute;
+  left: auto;
   right: 0;
   top: 100%;
   margin-top: var(--space-xs);
@@ -216,16 +217,16 @@
   border: 1px solid #666;
   border-radius: var(--border-radius-sm);
   padding: var(--space-xs);
-  min-width: 120px;
-  max-width: calc(100vw - 32px);
-  z-index: 100;
-  box-shadow: 4px 4px 0px #666;
+  min-width: 100px;
+  z-index: 1000;
+  box-shadow: 2px 2px 0px #666;
   image-rendering: pixelated;
-  white-space: nowrap;
+  font-size: 10px;
 }
 
 .menu-item {
   display: flex;
+  white-space: nowrap;
   align-items: center;
   gap: var(--space-sm);
   width: 100%;

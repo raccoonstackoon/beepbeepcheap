@@ -1,45 +1,10 @@
 import './PixelMascot.css';
+import hyraxImage from '../assets/hyrax.png';
 
-export function Hyrax({ variant = 'smiling', className = '', useGif = false, gifSrc = null }) {
-  // If using a gif, render an img tag instead of SVG
-  if (useGif && gifSrc) {
-    return (
-      <div className={`pixel-mascot hyrax hyrax-${variant} ${className} hyrax-gif`}>
-        <img src={gifSrc} alt="Hyrax" className="mascot-gif" />
-      </div>
-    );
-  }
-
+export function Hyrax({ variant = 'smiling', className = '' }) {
   return (
     <div className={`pixel-mascot hyrax hyrax-${variant} ${className}`}>
-      <svg width="64" height="64" viewBox="0 0 64 64" className="mascot-svg">
-        {/* Body */}
-        <rect x="16" y="32" width="32" height="24" fill="#D4A574" stroke="#1A1A2E" strokeWidth="2"/>
-        {/* Head */}
-        <rect x="20" y="16" width="24" height="20" fill="#E8C99B" stroke="#1A1A2E" strokeWidth="2"/>
-        {/* Ears */}
-        <rect x="18" y="12" width="8" height="10" fill="#C99A6A" stroke="#1A1A2E" strokeWidth="2"/>
-        <rect x="38" y="12" width="8" height="10" fill="#C99A6A" stroke="#1A1A2E" strokeWidth="2"/>
-        {/* Eyes */}
-        {variant === 'blinking' ? (
-          <>
-            <line x1="24" y1="26" x2="30" y2="26" stroke="#1A1A2E" strokeWidth="2"/>
-            <line x1="34" y1="26" x2="40" y2="26" stroke="#1A1A2E" strokeWidth="2"/>
-          </>
-        ) : (
-          <>
-            <circle cx="27" cy="26" r="3" fill="#1A1A2E"/>
-            <circle cx="37" cy="26" r="3" fill="#1A1A2E"/>
-          </>
-        )}
-        {/* Nose */}
-        <rect x="30" y="30" width="4" height="4" fill="#1A1A2E"/>
-        {/* Mouth - smiling */}
-        <path d="M 28 34 Q 32 38 36 34" stroke="#1A1A2E" strokeWidth="2" fill="none"/>
-        {/* Paws */}
-        <rect x="18" y="50" width="8" height="6" fill="#C99A6A" stroke="#1A1A2E" strokeWidth="2"/>
-        <rect x="38" y="50" width="8" height="6" fill="#C99A6A" stroke="#1A1A2E" strokeWidth="2"/>
-      </svg>
+      <img src={hyraxImage} alt="Hyrax" className="mascot-img" />
     </div>
   );
 }

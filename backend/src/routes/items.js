@@ -3,7 +3,7 @@ import multer from 'multer';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import * as queries from '../database/queries.js';
-import { scrapeProduct, scrapePrice, searchStoreForProduct } from '../services/scraper.js';
+import { scrapeProduct, scrapePrice, searchDuckDuckGoShopping } from '../services/scraper.js';
 import { processImage } from '../services/imageProcessor.js';
 
 const router = express.Router();
@@ -105,19 +105,26 @@ router.post('/url', async (req, res) => {
   }
 });
 
-// POST /api/items/image - Add item by image (price tag or product photo)
-// Optional: pass storeName in body to override auto-detection (useful for mirrored/unclear labels)
-// Optional: pass focusArea in body with {x, y, width, height} percentages to focus on specific area
+// POST /api/items/image - Add item by product photo
+// NEW FLOW:
+// 1. Analyze image to detect brand/logo
+// 2. If no brand detected, return needsShopName=true so frontend asks user
+// 3. Once we have a brand, search the brand's official website for visually similar products
+// 4. Return the matching product URL from the brand's official site
+//
+// Params:
+// - identifyOnly=true: Just identify the product and check for brand (step 1-2)
+// - shopName: User-provided brand/shop name (for step 3)
 router.post('/image', upload.single('image'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'Image is required' });
     }
     
-    const imageType = req.body.type || 'product'; // 'pricetag' or 'product'
-    const userProvidedStore = req.body.storeName; // User can override store detection
     const imagePath = req.file.path;
     const imageUrl = `/uploads/${req.file.filename}`;
+    const identifyOnly = req.body.identifyOnly === 'true';
+    const userProvidedShop = req.body.shopName?.trim() || null;
     
     // Parse focus area if provided (from spotlight annotation)
     let focusArea = null;
@@ -130,14 +137,14 @@ router.post('/image', upload.single('image'), async (req, res) => {
       }
     }
     
-    console.log(`Processing ${imageType} image: ${imagePath}`);
-    console.log(`📦 Request body:`, JSON.stringify(req.body));
-    if (userProvidedStore) {
-      console.log(`📍 User specified store: ${userProvidedStore}`);
-    }
+    console.log(`📸 Processing product image: ${imagePath}`);
+    if (identifyOnly) console.log(`   Mode: Identify only`);
+    if (userProvidedShop) console.log(`   User-provided brand: ${userProvidedShop}`);
     
-    // Process image with Claude Vision (pass focus area if available)
-    const result = await processImage(imagePath, imageType, focusArea);
+    // ═══════════════════════════════════════════════════════════════════════
+    // STEP 1: Analyze image with AI to detect brand and identify product
+    // ═══════════════════════════════════════════════════════════════════════
+    const result = await processImage(imagePath, 'product', focusArea);
     
     if (!result.success) {
       return res.status(400).json({ 
@@ -146,58 +153,105 @@ router.post('/image', upload.single('image'), async (req, res) => {
       });
     }
     
-    // Use user-provided store name if given, otherwise use detected one
-    const storeName = userProvidedStore || result.storeName;
+    // Check if we detected a brand
+    const detectedBrand = result.brand && 
+                          result.brand.toLowerCase() !== 'unknown' && 
+                          result.brand.toLowerCase() !== 'null' &&
+                          result.brandConfidence !== 'none'
+                          ? result.brand : null;
     
-    // If we have a store name, try to find the product URL on their website
-    let productUrl = null;
-    let storeSearchResult = null;
-    let scrapedImageUrl = null;
+    console.log(`🏷️ AI Analysis Results:`);
+    console.log(`   Product: ${result.itemName || 'Unknown'}`);
+    console.log(`   Brand: ${detectedBrand || 'Not detected'}`);
+    console.log(`   Confidence: ${result.brandConfidence || 'N/A'}`);
+    console.log(`   Source: ${result.brandSource || 'N/A'}`);
     
-    if (storeName && result.itemName) {
-      // Build a better search query - include brand if it's different from the store
-      let searchQuery = result.itemName;
-      if (result.brand && result.brand.toLowerCase() !== storeName.toLowerCase()) {
-        // If brand isn't already in the item name, prepend it
-        if (!result.itemName.toLowerCase().includes(result.brand.toLowerCase())) {
-          searchQuery = `${result.brand} ${result.itemName}`;
-        }
-      }
-      
-      console.log(`🔍 Searching ${storeName} for: ${searchQuery} (price: ${result.price})`);
-      storeSearchResult = await searchStoreForProduct(storeName, searchQuery, result.price);
-      
-      if (storeSearchResult.success) {
-        productUrl = storeSearchResult.productUrl;
-        console.log(`✅ Found product URL: ${productUrl}`);
-        
-        // Scrape the product page to get the product image
-        console.log(`🖼️ Scraping product image from: ${productUrl}`);
-        try {
-          const productData = await scrapeProduct(productUrl);
-          if (productData.success && productData.imageUrl) {
-            scrapedImageUrl = productData.imageUrl;
-            console.log(`✅ Found product image: ${scrapedImageUrl}`);
-          }
-        } catch (scrapeError) {
-          console.log(`⚠️ Could not scrape product image: ${scrapeError.message}`);
-        }
-      } else {
-        console.log(`⚠️ Could not find product URL: ${storeSearchResult.error}`);
+    // The brand to use (user-provided takes precedence)
+    const brandName = userProvidedShop || detectedBrand;
+    const hasBrand = !!brandName;
+    
+    // ═══════════════════════════════════════════════════════════════════════
+    // STEP 2: If identifyOnly mode, return identification results
+    // Frontend will check needsShopName to decide if user input is needed
+    // ═══════════════════════════════════════════════════════════════════════
+    if (identifyOnly) {
+      return res.json({
+        extracted: { 
+          ...result, 
+          brand: detectedBrand,
+          brandConfidence: result.brandConfidence,
+          brandSource: result.brandSource
+        },
+        localImageUrl: imageUrl,
+        hasBrand: hasBrand,
+        needsShopName: !hasBrand // Tell frontend to ask for brand name
+      });
+    }
+    
+    // ═══════════════════════════════════════════════════════════════════════
+    // STEP 3: SEARCH DUCKDUCKGO SHOPPING for cheapest prices
+    // Returns TOP 3 cheapest results for user to choose from
+    // ═══════════════════════════════════════════════════════════════════════
+    const productName = result.itemName || result.description || '';
+    
+    // Build search query: brand + product name (avoid duplicating brand if already in product name)
+    let searchQuery = productName;
+    if (brandName) {
+      const brandLower = brandName.toLowerCase();
+      const productLower = productName.toLowerCase();
+      // Only add brand if not already in product name
+      if (!productLower.includes(brandLower)) {
+        searchQuery = `${brandName} ${productName}`.trim();
       }
     }
     
-    // Return extracted info for user to review/edit before saving
+    console.log(`🛒 Searching DuckDuckGo Shopping for: "${searchQuery}"`);
+    
+    const shoppingResults = await searchDuckDuckGoShopping(searchQuery);
+    
+    console.log(`📊 Found ${shoppingResults.results?.length || 0} shopping results`);
+    
+    // Filter results to ONLY show items from the specified store (if brand provided)
+    let filteredResults = shoppingResults.results || [];
+    
+    if (brandName) {
+      const brandLower = brandName.toLowerCase();
+      const beforeCount = filteredResults.length;
+      
+      filteredResults = filteredResults.filter(r => {
+        const storeLower = (r.storeName || '').toLowerCase();
+        const titleLower = (r.title || '').toLowerCase();
+        // Match if store name or product title contains the brand
+        return storeLower.includes(brandLower) || titleLower.includes(brandLower);
+      });
+      
+      console.log(`🏪 Filtered to "${brandName}" only: ${filteredResults.length} of ${beforeCount} results`);
+    }
+    
+    // Get top 3 cheapest (already sorted by price in the scraper)
+    const topResults = filteredResults.slice(0, 3);
+    
+    for (const r of topResults) {
+      console.log(`   💰 £${r.price || 'N/A'} - ${r.title?.substring(0, 50)}... (${r.storeName})`);
+    }
+    
+    // ═══════════════════════════════════════════════════════════════════════
+    // STEP 4: Return TOP 3 results for user to choose from
+    // ═══════════════════════════════════════════════════════════════════════
     res.json({
-      extracted: {
-        ...result,
-        storeName: storeName // Use the final store name (user override or detected)
+      extracted: { 
+        ...result, 
+        brand: brandName || detectedBrand 
       },
       localImageUrl: imageUrl,
-      productUrl: productUrl,
-      productImageUrl: scrapedImageUrl, // Image from the actual product page
-      storeSearch: storeSearchResult
+      // Return the top 3 cheapest options for user to choose
+      shoppingOptions: topResults,
+      // Also include search metadata
+      searchQuery: searchQuery,
+      totalResultsFound: shoppingResults.results?.length || 0,
+      searchMethod: 'duckduckgo_shopping'
     });
+    
   } catch (error) {
     console.error('Error processing image:', error);
     res.status(500).json({ error: 'Failed to process image' });

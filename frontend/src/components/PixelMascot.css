@@ -7,7 +7,11 @@
   image-rendering: crisp-edges;
 }
 
-.mascot-svg {
+.mascot-svg,
+.mascot-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
   image-rendering: pixelated;
   image-rendering: -moz-crisp-edges;
   image-rendering: crisp-edges;
@@ -43,20 +47,21 @@
 
 /* Hyrax Animations */
 .hyrax {
-  animation: hyrax-idle 2s ease-in-out infinite;
+  animation: hyrax-wobble 3s ease-in-out infinite;
+  opacity: 1;
 }
 
-.hyrax-smiling .mascot-svg circle {
-  animation: blink 3s ease-in-out infinite;
+.hyrax .mascot-img {
+  opacity: 1;
+  /* Sharp 8-bit pixel rendering */
+  image-rendering: pixelated;
+  image-rendering: -moz-crisp-edges;
+  image-rendering: crisp-edges;
 }
 
-.hyrax-blinking {
-  animation: hyrax-idle 2s ease-in-out infinite, blink 4s ease-in-out infinite;
-}
-
-@keyframes hyrax-idle {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-2px); }
+@keyframes hyrax-wobble {
+  0%, 100% { transform: rotate(-5deg); }
+  50% { transform: rotate(5deg); }
 }
 
 /* Raccoon Animations */

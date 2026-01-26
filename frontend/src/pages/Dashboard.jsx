@@ -124,7 +124,7 @@ export default function Dashboard({ items, alerts, onRefresh, apiBase }) {
       <nav className="nav-modern">
         <div className="nav-conveyor-belt">
           <div className="nav-conveyor-text">
-            SNOOP THAT PRICE DROP LIKE ITS HOT <img src={hyraxImage} alt="hyrax" className="conveyor-mascot" /> SNOOP THAT PRICE DROP LIKE ITS HOT <img src={raccoonImage} alt="raccoon" className="conveyor-mascot" /> SNOOP THAT PRICE DROP LIKE ITS HOT <img src={hyraxImage} alt="hyrax" className="conveyor-mascot" /> SNOOP THAT PRICE DROP LIKE ITS HOT <img src={raccoonImage} alt="raccoon" className="conveyor-mascot" /> SNOOP THAT PRICE DROP LIKE ITS HOT <img src={hyraxImage} alt="hyrax" className="conveyor-mascot" /> SNOOP THAT PRICE DROP LIKE ITS HOT <img src={raccoonImage} alt="raccoon" className="conveyor-mascot" /> SNOOP THAT PRICE DROP LIKE ITS HOT <img src={hyraxImage} alt="hyrax" className="conveyor-mascot" /> SNOOP THAT PRICE DROP LIKE ITS HOT <img src={raccoonImage} alt="raccoon" className="conveyor-mascot" />
+            MONITOR PRICES AND GET BEEP BEEP WHEN CHEAP <img src={hyraxImage} alt="hyrax" className="conveyor-mascot" /> MONITOR PRICES AND GET BEEP BEEP WHEN CHEAP <img src={raccoonImage} alt="raccoon" className="conveyor-mascot" /> MONITOR PRICES AND GET BEEP BEEP WHEN CHEAP <img src={hyraxImage} alt="hyrax" className="conveyor-mascot" /> MONITOR PRICES AND GET BEEP BEEP WHEN CHEAP <img src={raccoonImage} alt="raccoon" className="conveyor-mascot" /> MONITOR PRICES AND GET BEEP BEEP WHEN CHEAP <img src={hyraxImage} alt="hyrax" className="conveyor-mascot" /> MONITOR PRICES AND GET BEEP BEEP WHEN CHEAP <img src={raccoonImage} alt="raccoon" className="conveyor-mascot" /> MONITOR PRICES AND GET BEEP BEEP WHEN CHEAP <img src={hyraxImage} alt="hyrax" className="conveyor-mascot" /> MONITOR PRICES AND GET BEEP BEEP WHEN CHEAP <img src={raccoonImage} alt="raccoon" className="conveyor-mascot" />
           </div>
         </div>
         <div className="nav-modern-container">
@@ -214,34 +214,34 @@ export default function Dashboard({ items, alerts, onRefresh, apiBase }) {
 
       {/* Items Grid */}
       <main className="main-modern">
-        <div className="cta-banner">
-          <button 
-            className="btn-rainbow"
-            onClick={() => setShowAddModal(true)}
-          >
-            <Sparkles size={16} />
-            <span>Track a New Item</span>
-          </button>
-        </div>
-        <div className="section-header-modern">
-          <h2 className="section-title-modern">Your Tracked Items</h2>
-          <p className="section-subtitle-modern">Monitor prices and get notified of changes</p>
-        </div>
+        {/* Only show CTA banner when there are items */}
+        {items.length > 0 && (
+          <div className="cta-banner">
+            <button 
+              className="btn-rainbow"
+              onClick={() => setShowAddModal(true)}
+            >
+              <Sparkles size={16} />
+              <span>Track a New Item</span>
+            </button>
+          </div>
+        )}
         {items.length === 0 ? (
           <div className="empty-state-modern">
             <div className="empty-state-icon">
               <Hyrax variant="blinking" className="large" />
+              <Raccoon variant="waving" className="large" useGif={true} gifSrc={raccoonImage} />
             </div>
             <h3 className="empty-state-title">Start Tracking Prices</h3>
             <p className="empty-state-text">
               Add your first item to begin monitoring prices and saving money
             </p>
             <button 
-              className="btn-modern btn-modern-primary btn-modern-large"
+              className="btn-rainbow btn-rainbow-large"
               onClick={() => setShowAddModal(true)}
             >
-              <Plus size={16} />
-              <span>Add Your First Item</span>
+              <Sparkles size={16} />
+              <span>Track a New Item</span>
             </button>
           </div>
         ) : (

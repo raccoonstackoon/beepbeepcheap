@@ -3,7 +3,6 @@ import {
   X, 
   Link as LinkIcon, 
   Camera, 
-  Package,
   Loader,
   ArrowRight,
   ExternalLink,
@@ -13,7 +12,7 @@ import './AddItemModal.css';
 import ImageAnnotator from './ImageAnnotator';
 
 export default function AddItemModal({ onClose, onSuccess, apiBase }) {
-  const [mode, setMode] = useState(null); // 'url', 'pricetag', 'product'
+  const [mode, setMode] = useState(null); // 'url' or 'product'
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   
@@ -29,6 +28,16 @@ export default function AddItemModal({ onClose, onSuccess, apiBase }) {
   // Annotation state - the spotlight focus area
   const [isAnnotating, setIsAnnotating] = useState(false);
   const [focusArea, setFocusArea] = useState(null);
+  
+  // Shop name input state - shown when no brand/shop detected
+  const [needsShopName, setNeedsShopName] = useState(false);
+  const [shopNameInput, setShopNameInput] = useState('');
+  const [identifiedProduct, setIdentifiedProduct] = useState(null);
+  const [productNameInput, setProductNameInput] = useState(''); // Editable product name
+  
+  // Shopping options state - top 3 cheapest results
+  const [shoppingOptions, setShoppingOptions] = useState([]);
+  const [selectedOption, setSelectedOption] = useState(null);
   
   // Manual entry state (after extraction or direct)
   const [manualData, setManualData] = useState({
@@ -72,10 +81,18 @@ export default function AddItemModal({ onClose, onSuccess, apiBase }) {
     
     setImageFile(file);
     setImagePreview(URL.createObjectURL(file));
+    // Reset ALL state for fresh upload
     setExtractedData(null);
     setSearchResults(null);
+    setShoppingOptions([]);
+    setSelectedOption(null);
     setFocusArea(null);
     setError(null);
+    setNeedsShopName(false);
+    setShopNameInput('');
+    setProductNameInput('');
+    setIdentifiedProduct(null);
+    setManualData({ name: '', url: '', price: '', imageUrl: '', storeName: '' });
     // Automatically move to annotation step
     setIsAnnotating(true);
   };
@@ -95,7 +112,7 @@ export default function AddItemModal({ onClose, onSuccess, apiBase }) {
     setImagePreview(null);
   };
 
-  // Process the image with optional focus area from spotlight annotation
+  // Step 1: Identify the product (check if we need shop name)
   const handleImageProcess = async (area = null) => {
     if (!imageFile) return;
     
@@ -105,7 +122,7 @@ export default function AddItemModal({ onClose, onSuccess, apiBase }) {
     try {
       const formData = new FormData();
       formData.append('image', imageFile);
-      formData.append('type', mode);
+      formData.append('identifyOnly', 'true'); // Just identify, don't search yet
       
       // Include the focus area coordinates if provided (from spotlight annotation)
       const areaToUse = area || focusArea;
@@ -124,60 +141,19 @@ export default function AddItemModal({ onClose, onSuccess, apiBase }) {
         throw new Error(data.error || 'Failed to process image');
       }
       
-      setExtractedData(data.extracted);
-      
-      // Use the found product URL if available
-      const foundUrl = data.productUrl || '';
-      
-      // Use scraped product image if available, otherwise fall back to uploaded image
-      const imageToUse = data.productImageUrl || data.localImageUrl || '';
-      
-      setManualData({
-        name: data.extracted.itemName || data.extracted.name || '',
-        url: foundUrl,
-        price: data.extracted.price?.toString() || '',
-        imageUrl: imageToUse,
-        storeName: data.extracted.storeName || ''
+      // Store the identified product info
+      setIdentifiedProduct({
+        ...data.extracted,
+        localImageUrl: data.localImageUrl
       });
       
-      // Set search results based on what we found
-      if (data.productUrl && data.storeSearch?.success) {
-        // We found the actual product URL!
-        setSearchResults({
-          found: true,
-          searched: true,
-          productUrl: data.productUrl,
-          storeName: data.extracted.storeName,
-          searchUrl: data.storeSearch.searchUrl
-        });
-      } else if (data.storeSearch && !data.storeSearch.success) {
-        // We searched but didn't find the product
-        setSearchResults({
-          found: false,
-          searched: true,
-          storeName: data.extracted.storeName,
-          searchUrl: data.storeSearch.searchUrl,
-          error: data.storeSearch.error
-        });
-      } else if (data.extracted.itemName) {
-        // No search was attempted, show generic suggestions
-        setSearchResults({
-          found: false,
-          searched: false,
-          suggestions: [
-            {
-              store: data.extracted.storeName || 'Google',
-              searchUrl: `https://www.google.com/search?q=${encodeURIComponent((data.extracted.storeName || '') + ' ' + data.extracted.itemName)}`,
-              confidence: 'high'
-            },
-            {
-              store: 'Google Shopping',
-              searchUrl: `https://www.google.com/search?tbm=shop&q=${encodeURIComponent(data.extracted.itemName)}`,
-              confidence: 'medium'
-            }
-          ]
-        });
-      }
+      // Set the product name for potential editing
+      setProductNameInput(data.extracted.itemName || '');
+      
+      // Always show the confirmation/edit screen first
+      // User can verify/edit the product name and enter brand if needed
+      setNeedsShopName(true);
+      setShopNameInput(data.extracted.brand || '');
       
     } catch (err) {
       setError(err.message);
@@ -185,24 +161,28 @@ export default function AddItemModal({ onClose, onSuccess, apiBase }) {
     
     setLoading(false);
   };
-
-  // Re-search with corrected store name
-  const handleReSearch = async () => {
-    if (!manualData.storeName.trim() || !manualData.name.trim()) {
-      setError('Store name and item name are required to search');
-      return;
-    }
+  
+  // Step 2: Search shopping sites for cheapest prices
+  const searchWithShopName = async (shopName, productData = null, localImageUrl = null) => {
+    const product = productData || identifiedProduct;
+    const imgUrl = localImageUrl || identifiedProduct?.localImageUrl;
+    
+    if (!imageFile) return;
     
     setLoading(true);
     setError(null);
+    setNeedsShopName(false);
+    setShoppingOptions([]);
+    setSelectedOption(null);
     
     try {
       const formData = new FormData();
       formData.append('image', imageFile);
-      formData.append('type', mode);
-      formData.append('storeName', manualData.storeName.trim());
+      if (shopName) {
+        formData.append('shopName', shopName);
+      }
       
-      // Include focus area if available
+      // Include the focus area if we have it
       if (focusArea) {
         formData.append('focusArea', JSON.stringify(focusArea));
       }
@@ -218,27 +198,22 @@ export default function AddItemModal({ onClose, onSuccess, apiBase }) {
         throw new Error(data.error || 'Failed to search');
       }
       
-      // Update with new results
-      const foundUrl = data.productUrl || '';
-      const scrapedImage = data.productImageUrl || '';
-      setManualData(prev => ({
-        ...prev,
-        url: foundUrl,
-        imageUrl: scrapedImage || prev.imageUrl // Use scraped image if available
-      }));
+      setExtractedData(data.extracted);
       
-      if (data.productUrl && data.storeSearch?.success) {
-        setSearchResults({
-          found: true,
-          productUrl: data.productUrl,
-          storeName: manualData.storeName,
-          searchUrl: data.storeSearch.searchUrl
-        });
+      // NEW: Handle shopping options (top 3 cheapest)
+      if (data.shoppingOptions && data.shoppingOptions.length > 0) {
+        setShoppingOptions(data.shoppingOptions);
+        // Don't auto-select, let user choose
       } else {
+        // No shopping results found
+        const searchQuery = shopName 
+          ? `${shopName} ${product?.itemName || ''}` 
+          : product?.itemName || '';
+        
         setSearchResults({
           found: false,
-          error: data.storeSearch?.error || 'Product not found',
-          searchUrl: data.storeSearch?.searchUrl
+          searchUrl: `https://www.google.com/search?q=${encodeURIComponent(searchQuery)}&tbm=shop`,
+          error: 'No shopping results found'
         });
       }
       
@@ -247,6 +222,60 @@ export default function AddItemModal({ onClose, onSuccess, apiBase }) {
     }
     
     setLoading(false);
+  };
+  
+  // Handle user selecting a shopping option
+  const handleSelectOption = (option) => {
+    setSelectedOption(option);
+    setManualData({
+      name: option.title || identifiedProduct?.itemName || '',
+      url: option.productUrl || '',
+      price: option.price?.toString() || '',
+      imageUrl: option.imageUrl || imagePreview || '',
+      storeName: option.storeName || ''
+    });
+  };
+  
+  // Confirm selection and save item
+  const handleConfirmSelection = async () => {
+    if (!selectedOption && !manualData.name) {
+      setError('Please select an option or enter details manually');
+      return;
+    }
+    
+    await handleManualSave();
+  };
+  
+  // Handle confirmation/submission
+  const handleConfirmAndSearch = () => {
+    if (!shopNameInput.trim()) {
+      setError('Please enter the brand or shop name');
+      return;
+    }
+    if (!productNameInput.trim()) {
+      setError('Please enter a product description');
+      return;
+    }
+    // Update identified product with user's edits
+    const updatedProduct = {
+      ...identifiedProduct,
+      itemName: productNameInput.trim()
+    };
+    setIdentifiedProduct(updatedProduct);
+    searchWithShopName(shopNameInput.trim(), updatedProduct, identifiedProduct?.localImageUrl);
+  };
+  
+  // Skip brand and search with just product name
+  const handleSkipShopName = () => {
+    if (!productNameInput.trim()) {
+      setError('Please enter a product description');
+      return;
+    }
+    const updatedProduct = {
+      ...identifiedProduct,
+      itemName: productNameInput.trim()
+    };
+    searchWithShopName(null, updatedProduct, identifiedProduct?.localImageUrl);
   };
 
   const handleManualSave = async () => {
@@ -304,20 +333,12 @@ export default function AddItemModal({ onClose, onSuccess, apiBase }) {
               <p>Enter a product URL from any online store</p>
             </button>
             
-            <button className="mode-card" onClick={() => setMode('pricetag')}>
-              <div className="mode-icon pricetag-icon">
-                <Camera size={28} />
-              </div>
-              <h3>Price Tag Photo</h3>
-              <p>Take a photo of a price tag from a physical store</p>
-            </button>
-            
             <button className="mode-card" onClick={() => setMode('product')}>
               <div className="mode-icon product-icon">
-                <Package size={28} />
+                <Camera size={28} />
               </div>
-              <h3>Product Photo</h3>
-              <p>Take a photo of a product to identify it</p>
+              <h3>Take a Photo</h3>
+              <p>Snap a product and we'll find the best price online</p>
             </button>
           </div>
         )}
@@ -367,14 +388,11 @@ export default function AddItemModal({ onClose, onSuccess, apiBase }) {
           </div>
         )}
         
-        {/* Image Mode - Step 1: Upload (pricetag or product) */}
-        {(mode === 'pricetag' || mode === 'product') && !extractedData && !isAnnotating && !loading && (
+        {/* Image Mode - Step 1: Upload */}
+        {mode === 'product' && !extractedData && !isAnnotating && !loading && (
           <div className="image-mode">
             <p className="mode-description">
-              {mode === 'pricetag' 
-                ? 'Upload a photo of a price tag. We\'ll extract the item name, price, and store.'
-                : 'Upload a photo of the product. We\'ll try to identify it so you can track its price online.'
-              }
+              Upload a photo of the product. We'll identify it and find the best price online.
             </p>
             
             <div className="image-upload-area">
@@ -383,7 +401,6 @@ export default function AddItemModal({ onClose, onSuccess, apiBase }) {
                   type="file"
                   accept="image/*"
                   onChange={handleImageSelect}
-                  capture="environment"
                 />
                 <Camera size={32} />
                 <span>Click to upload or take a photo</span>
@@ -401,7 +418,7 @@ export default function AddItemModal({ onClose, onSuccess, apiBase }) {
         )}
         
         {/* Image Mode - Step 2: Annotate with Spotlight */}
-        {(mode === 'pricetag' || mode === 'product') && isAnnotating && imagePreview && !loading && (
+        {mode === 'product' && isAnnotating && imagePreview && !loading && (
           <div className="annotation-mode">
             <ImageAnnotator
               imageUrl={imagePreview}
@@ -412,32 +429,164 @@ export default function AddItemModal({ onClose, onSuccess, apiBase }) {
           </div>
         )}
         
+        {/* Image Mode - Step 3: Confirm/edit product details */}
+        {mode === 'product' && needsShopName && !loading && (
+          <div className="brand-input-mode">
+            <div className="brand-preview">
+              {imagePreview && (
+                <img src={imagePreview} alt="Product" className="brand-preview-image" />
+              )}
+            </div>
+            
+            <div className="brand-prompt">
+              <h3>Confirm Details</h3>
+              <p className="mode-description">
+                Check if we got it right. Edit if needed!
+              </p>
+              
+              <div className="form-group">
+                <label>What is this product?</label>
+                <input
+                  type="text"
+                  placeholder="e.g., Brown Bear Face Cushion"
+                  value={productNameInput}
+                  onChange={(e) => setProductNameInput(e.target.value)}
+                />
+                <span className="form-hint">Edit if the AI got it wrong</span>
+              </div>
+              
+              <div className="form-group">
+                <label>Brand / Shop</label>
+                <input
+                  type="text"
+                  placeholder="e.g., IKEA, Miffy, Zara..."
+                  value={shopNameInput}
+                  onChange={(e) => setShopNameInput(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleConfirmAndSearch()}
+                />
+                <span className="form-hint">Where did you buy it?</span>
+              </div>
+              
+              {error && <p className="error-message">{error}</p>}
+              
+              <div className="modal-actions">
+                <button 
+                  className="btn btn-secondary" 
+                  onClick={handleSkipShopName}
+                  disabled={!productNameInput.trim()}
+                >
+                  Search without brand
+                </button>
+                <button 
+                  className="btn btn-primary"
+                  onClick={handleConfirmAndSearch}
+                  disabled={!shopNameInput.trim() || !productNameInput.trim()}
+                >
+                  Search
+                  <ArrowRight size={18} />
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        
         {/* Image Mode - Loading state while processing */}
-        {(mode === 'pricetag' || mode === 'product') && loading && !extractedData && (
+        {mode === 'product' && loading && !extractedData && (
           <div className="image-mode processing">
             <div className="processing-indicator">
               <Loader size={32} className="spinning" />
-              <p>Analyzing your image...</p>
+              <p>Finding exact matches...</p>
               <span className="processing-hint">
-                {mode === 'pricetag' 
-                  ? 'Looking for price, product name, and store info...'
-                  : 'Identifying the product...'
-                }
+                Searching for the best price...
               </span>
             </div>
           </div>
         )}
         
-        {/* Extracted Data Review */}
-        {extractedData && (
-          <div className="extracted-mode">
-            <div className="extracted-success">
-              <Check size={20} />
-              <span>Information extracted! Review and save below.</span>
+        {/* Shopping Options - User picks from top 3 cheapest */}
+        {extractedData && shoppingOptions.length > 0 && !selectedOption && (
+          <div className="shopping-options-mode">
+            <h3>Pick one to track</h3>
+            <p className="mode-description">
+              We found these options online. Select one to monitor its price:
+            </p>
+            
+            <div className="shopping-options-list">
+              {shoppingOptions.map((option, index) => (
+                <button 
+                  key={index}
+                  className="shopping-option-card"
+                  onClick={() => handleSelectOption(option)}
+                >
+                  <div className="option-rank">#{index + 1}</div>
+                  {option.imageUrl && (
+                    <img src={option.imageUrl} alt={option.title} className="option-image" />
+                  )}
+                  <div className="option-details">
+                    <h4 className="option-title">{option.title?.substring(0, 60)}...</h4>
+                    <div className="option-meta">
+                      <span className="option-store">{option.storeName}</span>
+                      {option.price && (
+                        <span className="option-price">£{option.price.toFixed(2)}</span>
+                      )}
+                    </div>
+                  </div>
+                  <ExternalLink size={16} className="option-arrow" />
+                </button>
+              ))}
             </div>
             
+            <div className="shopping-options-footer">
+              <p className="form-help">
+                Can't find what you're looking for?
+              </p>
+              <button 
+                className="btn btn-link"
+                onClick={() => {
+                  // Allow manual entry
+                  setSelectedOption({ manual: true });
+                  setManualData({
+                    name: identifiedProduct?.itemName || '',
+                    url: '',
+                    price: '',
+                    imageUrl: imagePreview || '',
+                    storeName: ''
+                  });
+                }}
+              >
+                Enter details manually
+              </button>
+            </div>
+            
+            {error && <p className="error-message">{error}</p>}
+            
+            <div className="modal-actions">
+              <button 
+                className="btn btn-secondary" 
+                onClick={() => {
+                  setExtractedData(null);
+                  setShoppingOptions([]);
+                  setNeedsShopName(true);
+                }}
+              >
+                Back
+              </button>
+            </div>
+          </div>
+        )}
+        
+        {/* Confirm selected option OR manual entry */}
+        {extractedData && (selectedOption || (searchResults && !searchResults.found)) && (
+          <div className="extracted-mode">
+            {selectedOption && !selectedOption.manual && (
+              <div className="extracted-success">
+                <Check size={20} />
+                <span>Great choice! Confirm details below.</span>
+              </div>
+            )}
+            
             <div className="extracted-preview">
-              {/* Show scraped product image if available, otherwise show uploaded preview */}
+              {/* Show product image */}
               {(manualData.imageUrl?.startsWith('http') || imagePreview) && (
                 <img 
                   src={manualData.imageUrl?.startsWith('http') ? manualData.imageUrl : imagePreview} 
@@ -456,119 +605,48 @@ export default function AddItemModal({ onClose, onSuccess, apiBase }) {
                 />
               </div>
               
-              {mode === 'pricetag' && (
-                <>
-                  <div className="form-group">
-                    <label>Store Name</label>
-                    <div className="store-input-row">
-                      <input
-                        type="text"
-                        value={manualData.storeName}
-                        onChange={(e) => setManualData({ ...manualData, storeName: e.target.value })}
-                        placeholder="e.g., Roche Bobois, Harrods, Zara"
-                      />
-                      <button 
-                        className="btn btn-secondary btn-sm"
-                        onClick={handleReSearch}
-                        disabled={loading || !manualData.storeName.trim()}
-                        title="Search this store for the product"
-                      >
-                        {loading ? <Loader size={14} className="spinning" /> : 'Find URL'}
-                      </button>
-                    </div>
-                    <p className="form-help">
-                      Correct the store name and click "Find URL" to search again
-                    </p>
-                  </div>
-                  <div className="form-group">
-                    <label>Price</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={manualData.price}
-                      onChange={(e) => setManualData({ ...manualData, price: e.target.value })}
-                      placeholder="0.00"
-                    />
-                  </div>
-                </>
-              )}
-              
               <div className="form-group">
-                <label>URL to Track (optional)</label>
+                <label>URL to Track</label>
                 <input
                   type="url"
                   value={manualData.url}
                   onChange={(e) => setManualData({ ...manualData, url: e.target.value })}
                   placeholder="https://..."
                 />
-                <p className="form-help">
-                  Add a URL if you want to track the price online
-                </p>
+                {selectedOption && !selectedOption.manual && (
+                  <p className="form-help success-text">
+                    ✓ URL auto-filled from your selection
+                  </p>
+                )}
               </div>
+              
+              {selectedOption && !selectedOption.manual && manualData.price && (
+                <div className="selected-price-display">
+                  <span className="price-label">Current price:</span>
+                  <span className="price-value">£{parseFloat(manualData.price).toFixed(2)}</span>
+                  <span className="price-store">at {manualData.storeName}</span>
+                </div>
+              )}
             </div>
             
-            {/* Found product URL */}
-            {searchResults?.found && (
-              <div className="search-suggestions found-url">
-                <div className="found-url-header">
-                  <Check size={18} />
-                  <h4>Product found on {searchResults.storeName}!</h4>
-                </div>
-                <a
-                  href={searchResults.productUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="found-product-link"
-                >
-                  <ExternalLink size={14} />
-                  View product page
-                </a>
-                <p className="form-help success-text">
-                  ✓ URL auto-filled above - ready to track!
-                </p>
-              </div>
-            )}
-            
-            {/* Product not found online */}
-            {searchResults && searchResults.searched && !searchResults.found && (
+            {/* No shopping results found - show manual search link */}
+            {searchResults && !searchResults.found && (
               <div className="search-suggestions not-found">
-                <h4>⚠️ Product not found on {searchResults.storeName} website</h4>
+                <h4>⚠️ No results found</h4>
                 <p className="form-help">
-                  This item may only be available in-store, or sold under a different name online.
+                  Try searching manually or paste a URL if you find it.
                 </p>
-                <a
-                  href={searchResults.searchUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="suggestion-link"
-                >
-                  <ExternalLink size={14} />
-                  Try searching manually
-                </a>
-              </div>
-            )}
-            
-            {/* Search suggestions (when URL not found) */}
-            {searchResults && !searchResults.found && searchResults.suggestions && (
-              <div className="search-suggestions">
-                <h4>Search for this item online:</h4>
-                <div className="suggestion-links">
-                  {searchResults.suggestions.map((suggestion, i) => (
-                    <a
-                      key={i}
-                      href={suggestion.searchUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="suggestion-link"
-                    >
-                      <ExternalLink size={14} />
-                      {suggestion.store}
-                    </a>
-                  ))}
-                </div>
-                <p className="form-help">
-                  Find the product, copy the URL, and paste it above to track the price
-                </p>
+                {searchResults.searchUrl && (
+                  <a
+                    href={searchResults.searchUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="suggestion-link"
+                  >
+                    <ExternalLink size={14} />
+                    Search Google Shopping
+                  </a>
+                )}
               </div>
             )}
             
@@ -578,15 +656,20 @@ export default function AddItemModal({ onClose, onSuccess, apiBase }) {
               <button 
                 className="btn btn-secondary" 
                 onClick={() => {
-                  setExtractedData(null);
-                  setSearchResults(null);
+                  setSelectedOption(null);
+                  if (shoppingOptions.length > 0) {
+                    // Go back to options
+                  } else {
+                    setExtractedData(null);
+                    setSearchResults(null);
+                  }
                 }}
               >
                 Back
               </button>
               <button 
                 className="btn btn-primary"
-                onClick={handleManualSave}
+                onClick={handleConfirmSelection}
                 disabled={!manualData.name.trim() || loading}
               >
                 {loading ? (
@@ -596,7 +679,7 @@ export default function AddItemModal({ onClose, onSuccess, apiBase }) {
                   </>
                 ) : (
                   <>
-                    Save Item
+                    Track This Item
                     <Check size={18} />
                   </>
                 )}
