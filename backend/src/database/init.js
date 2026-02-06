@@ -74,6 +74,27 @@ export function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_alerts_is_read ON alerts(is_read);
   `);
 
+  // Create rewards table for gamification
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS rewards (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      coins INTEGER DEFAULT 0,
+      giants_caught INTEGER DEFAULT 0,
+      first_item_claimed INTEGER DEFAULT 0,
+      savings_10_claimed INTEGER DEFAULT 0,
+      savings_50_claimed INTEGER DEFAULT 0,
+      savings_100_claimed INTEGER DEFAULT 0,
+      streak_current INTEGER DEFAULT 0,
+      streak_best INTEGER DEFAULT 0,
+      last_checkin_date TEXT
+    )
+  `);
+  
+  // Insert default rewards row if it doesn't exist
+  db.exec(`
+    INSERT OR IGNORE INTO rewards (id, coins) VALUES (1, 0)
+  `);
+
   console.log('✅ Database initialized successfully');
 }
 

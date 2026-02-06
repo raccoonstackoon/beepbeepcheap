@@ -107,13 +107,18 @@
 }
 
 .pixel-mascot.large {
-  width: 96px;
-  height: 96px;
+  width: 140px;
+  height: 140px;
 }
 
 .pixel-mascot.large svg {
-  width: 96px;
-  height: 96px;
+  width: 140px;
+  height: 140px;
+}
+
+.pixel-mascot.large img {
+  width: 140px;
+  height: 140px;
 }
 
 /* Mascot Positions */

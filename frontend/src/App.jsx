@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Dashboard from './pages/Dashboard';
 import ItemDetail from './pages/ItemDetail';
+import Rewards from './pages/Rewards';
+import NotificationContainer from './components/NotificationContainer';
 import './App.css';
 
 // Dynamically determine API URL based on current host
@@ -75,6 +77,12 @@ function App() {
 
   return (
     <BrowserRouter>
+      {/* Real-time notification toasts */}
+      <NotificationContainer 
+        apiBase={API_BASE} 
+        onNewAlert={refreshData}
+      />
+      
       <Routes>
         <Route 
           path="/" 
@@ -93,6 +101,14 @@ function App() {
             <ItemDetail 
               apiBase={API_BASE}
               onRefresh={refreshData}
+            />
+          } 
+        />
+        <Route 
+          path="/rewards" 
+          element={
+            <Rewards 
+              apiBase={API_BASE}
             />
           } 
         />

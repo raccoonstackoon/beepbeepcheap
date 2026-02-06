@@ -26,6 +26,191 @@
   image-rendering: crisp-edges;
 }
 
+/* GIANT mascot - rare and dramatic! */
+.falling-mascot-giant {
+  z-index: 999;
+  filter: 
+    drop-shadow(0 0 15px rgba(255, 215, 0, 0.9))
+    drop-shadow(0 0 30px rgba(255, 215, 0, 0.7))
+    drop-shadow(0 0 45px rgba(255, 200, 0, 0.5));
+  animation: fall-down-giant linear forwards, golden-pulse 0.5s ease-in-out infinite;
+}
+
+.falling-mascot-giant .falling-mascot-img {
+  animation: giant-wobble 0.5s ease-in-out infinite;
+}
+
+@keyframes golden-pulse {
+  0%, 100% {
+    filter: brightness(1.1);
+  }
+  50% {
+    filter: brightness(1.3);
+  }
+}
+
+@keyframes fall-down-giant {
+  0% {
+    transform: translateY(0) rotate(-5deg) scale(1);
+    opacity: 0;
+  }
+  5% {
+    opacity: 1;
+  }
+  50% {
+    transform: translateY(50vh) rotate(5deg) scale(1.05);
+  }
+  100% {
+    transform: translateY(calc(100vh + 300px)) rotate(-5deg) scale(1);
+    opacity: 0.8;
+  }
+}
+
+@keyframes giant-wobble {
+  0%, 100% { transform: rotate(-2deg); }
+  50% { transform: rotate(2deg); }
+}
+
+/* Clickable giant mascots */
+.falling-mascot-clickable {
+  pointer-events: auto !important;
+  cursor: pointer;
+}
+
+.falling-mascot-clickable:hover {
+  filter: drop-shadow(0 0 30px rgba(255, 220, 100, 0.9)) brightness(1.1);
+  transform: scale(1.05);
+}
+
+.falling-mascot-clickable:active {
+  transform: scale(0.95);
+}
+
+/* ============ REWARDS DISPLAY ============ */
+
+.reward-stat.reward-coins {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--pixel-yellow);
+  border: 2px solid var(--pixel-outline);
+  border-radius: var(--border-radius-sm);
+  padding: 2px 8px;
+  box-shadow: var(--shadow-pixel-sm);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: all 0.1s ease;
+  text-decoration: none;
+}
+
+.reward-stat.reward-coins:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-pixel-sm), 0 2px 0 var(--pixel-outline);
+  background: #ffe066;
+}
+
+.reward-stat.reward-coins:active {
+  transform: translateY(1px);
+  box-shadow: none;
+}
+
+.reward-coins .coin-icon {
+  width: 14px;
+  height: 14px;
+  color: var(--pixel-orange);
+}
+
+.reward-value {
+  font-family: var(--font-pixel);
+  font-size: 10px;
+  color: var(--pixel-dark);
+  font-weight: bold;
+}
+
+/* ============ REWARD TOAST ============ */
+
+.reward-toast {
+  position: fixed;
+  top: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2000;
+  animation: toast-appear 0.3s ease-out, toast-disappear 0.3s ease-in 2.7s forwards;
+}
+
+.reward-toast-content {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  background: linear-gradient(135deg, var(--pixel-yellow) 0%, var(--pixel-orange) 100%);
+  border: 3px solid var(--pixel-outline);
+  border-radius: var(--border-radius-md);
+  padding: var(--space-md) var(--space-lg);
+  box-shadow: var(--shadow-pixel-lg), 0 0 30px rgba(255, 200, 100, 0.5);
+  animation: toast-bounce 0.5s ease-out;
+}
+
+.reward-toast-icon {
+  width: 40px;
+  height: 40px;
+  image-rendering: pixelated;
+  animation: coin-spin 0.5s ease-out;
+}
+
+.reward-toast-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.reward-toast-message {
+  font-family: var(--font-pixel);
+  font-size: var(--font-size-sm);
+  color: var(--pixel-dark);
+  font-weight: bold;
+}
+
+.reward-toast-coins {
+  font-family: var(--font-pixel);
+  font-size: var(--font-size-md);
+  color: var(--pixel-dark);
+  font-weight: bold;
+  text-shadow: 1px 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+@keyframes toast-appear {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-20px) scale(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0) scale(1);
+  }
+}
+
+@keyframes toast-disappear {
+  from {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-20px) scale(0.8);
+  }
+}
+
+@keyframes toast-bounce {
+  0% { transform: scale(0.5); }
+  50% { transform: scale(1.1); }
+  100% { transform: scale(1); }
+}
+
+@keyframes coin-spin {
+  from { transform: rotateY(0deg); }
+  to { transform: rotateY(360deg); }
+}
+
 @keyframes fall-down {
   0% {
     transform: translateY(0) rotate(0deg);
@@ -60,8 +245,8 @@
   max-width: 1400px;
   margin: 0 auto;
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  gap: var(--space-md);
   width: 100%;
   position: relative;
 }
@@ -69,7 +254,7 @@
 .nav-conveyor-belt {
   position: absolute;
   left: 60px;
-  right: 120px;
+  right: 280px; /* More space for rewards + buttons */
   top: 0;
   bottom: 0;
   display: flex;
@@ -163,6 +348,14 @@
   gap: var(--space-sm);
   position: relative;
   z-index: 2;
+  margin-left: auto;
+}
+
+.nav-divider {
+  width: 2px;
+  height: 20px;
+  background: var(--pixel-outline);
+  opacity: 0.3;
 }
 
 /* Retro Buttons */
@@ -835,9 +1028,19 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: var(--space-md);
-  margin-bottom: var(--space-lg);
+  gap: var(--space-xl);
+  margin-bottom: var(--space-xl);
   opacity: 1;
+}
+
+.empty-state-icon .pixel-mascot {
+  width: 160px;
+  height: 160px;
+}
+
+.empty-state-icon .pixel-mascot img {
+  width: 160px;
+  height: 160px;
 }
 
 .empty-state-title {

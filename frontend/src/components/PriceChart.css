@@ -23,7 +23,7 @@
 .tooltip-price {
   font-family: var(--font-pixel);
   font-size: var(--font-size-sm);
-  color: var(--pixel-mint);
+  color: #4ECDC4;
   margin-bottom: var(--space-xs);
 }
 
@@ -60,6 +60,6 @@
 }
 
 .legend-line.lowest {
-  background: var(--pixel-mint);
+  background: #4ECDC4;
   border-style: dashed;
 }

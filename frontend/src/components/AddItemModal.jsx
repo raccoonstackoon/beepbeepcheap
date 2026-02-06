@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { 
   X, 
   Link as LinkIcon, 
@@ -13,6 +13,9 @@ import ImageAnnotator from './ImageAnnotator';
 
 export default function AddItemModal({ onClose, onSuccess, apiBase }) {
   const [mode, setMode] = useState(null); // 'url' or 'product'
+  
+  // Ref to file input so we can trigger it programmatically
+  const fileInputRef = useRef(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   
@@ -34,6 +37,7 @@ export default function AddItemModal({ onClose, onSuccess, apiBase }) {
   const [shopNameInput, setShopNameInput] = useState('');
   const [identifiedProduct, setIdentifiedProduct] = useState(null);
   const [productNameInput, setProductNameInput] = useState(''); // Editable product name
+  const [variantsInput, setVariantsInput] = useState({ color: '', size: '', quantity: '', model: '' }); // Variant info
   
   // Shopping options state - top 3 cheapest results
   const [shoppingOptions, setShoppingOptions] = useState([]);
@@ -75,6 +79,15 @@ export default function AddItemModal({ onClose, onSuccess, apiBase }) {
     setLoading(false);
   };
 
+  // Handle clicking "Take a Photo" - immediately open file picker
+  const handlePhotoModeClick = () => {
+    setMode('product');
+    // Trigger the file input immediately
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
+    }
+  };
+
   const handleImageSelect = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -110,6 +123,10 @@ export default function AddItemModal({ onClose, onSuccess, apiBase }) {
     setIsAnnotating(false);
     setImageFile(null);
     setImagePreview(null);
+    // Reset file input so the same file can be selected again
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   };
 
   // Step 1: Identify the product (check if we need shop name)
@@ -150,6 +167,15 @@ export default function AddItemModal({ onClose, onSuccess, apiBase }) {
       // Set the product name for potential editing
       setProductNameInput(data.extracted.itemName || '');
       
+      // Set variants if extracted
+      const variants = data.extracted.variants || {};
+      setVariantsInput({
+        color: variants.color || '',
+        size: variants.size || '',
+        quantity: variants.quantity || '',
+        model: variants.model || ''
+      });
+      
       // Always show the confirmation/edit screen first
       // User can verify/edit the product name and enter brand if needed
       setNeedsShopName(true);
@@ -163,9 +189,8 @@ export default function AddItemModal({ onClose, onSuccess, apiBase }) {
   };
   
   // Step 2: Search shopping sites for cheapest prices
-  const searchWithShopName = async (shopName, productData = null, localImageUrl = null) => {
+  const searchWithShopName = async (shopName, productData = null) => {
     const product = productData || identifiedProduct;
-    const imgUrl = localImageUrl || identifiedProduct?.localImageUrl;
     
     if (!imageFile) return;
     
@@ -227,11 +252,28 @@ export default function AddItemModal({ onClose, onSuccess, apiBase }) {
   // Handle user selecting a shopping option
   const handleSelectOption = (option) => {
     setSelectedOption(option);
+    
+    // Use the retailer's product image from the shopping option
+    // Fall back to user's uploaded image if retailer image not available
+    let finalImageUrl = option.imageUrl || identifiedProduct?.localImageUrl || '';
+    
+    // Fix protocol-relative URLs
+    if (finalImageUrl && finalImageUrl.startsWith('//')) {
+      finalImageUrl = 'https:' + finalImageUrl;
+    }
+    
+    // Debug logging to track image URL issues
+    console.log('📸 Image URL selection:', {
+      optionImageUrl: option.imageUrl,
+      localImageUrl: identifiedProduct?.localImageUrl,
+      finalImageUrl: finalImageUrl
+    });
+    
     setManualData({
       name: option.title || identifiedProduct?.itemName || '',
       url: option.productUrl || '',
       price: option.price?.toString() || '',
-      imageUrl: option.imageUrl || imagePreview || '',
+      imageUrl: finalImageUrl,
       storeName: option.storeName || ''
     });
   };
@@ -287,6 +329,9 @@ export default function AddItemModal({ onClose, onSuccess, apiBase }) {
     setLoading(true);
     setError(null);
     
+    // Debug logging
+    console.log('💾 Saving item with image_url:', manualData.imageUrl);
+    
     try {
       const res = await fetch(`${apiBase}/items/manual`, {
         method: 'POST',
@@ -295,7 +340,8 @@ export default function AddItemModal({ onClose, onSuccess, apiBase }) {
           name: manualData.name.trim(),
           url: manualData.url.trim() || null,
           image_url: manualData.imageUrl || null,
-          current_price: manualData.price ? parseFloat(manualData.price) : null
+          current_price: manualData.price ? parseFloat(manualData.price) : null,
+          store_name: manualData.storeName || null
         })
       });
       
@@ -320,7 +366,14 @@ export default function AddItemModal({ onClose, onSuccess, apiBase }) {
           <X size={20} />
         </button>
         
-        <h2>Add Item to Track</h2>
+        {/* Hidden file input - triggered immediately when clicking "Take a Photo" */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          onChange={handleImageSelect}
+          style={{ display: 'none' }}
+        />
         
         {/* Mode selection */}
         {!mode && (
@@ -333,7 +386,7 @@ export default function AddItemModal({ onClose, onSuccess, apiBase }) {
               <p>Enter a product URL from any online store</p>
             </button>
             
-            <button className="mode-card" onClick={() => setMode('product')}>
+            <button className="mode-card" onClick={handlePhotoModeClick}>
               <div className="mode-icon product-icon">
                 <Camera size={28} />
               </div>
@@ -388,23 +441,22 @@ export default function AddItemModal({ onClose, onSuccess, apiBase }) {
           </div>
         )}
         
-        {/* Image Mode - Step 1: Upload */}
-        {mode === 'product' && !extractedData && !isAnnotating && !loading && (
+        {/* Image Mode - Step 1: Upload (shown if user cancels file picker or needs to re-select) */}
+        {mode === 'product' && !extractedData && !isAnnotating && !loading && !imageFile && !needsShopName && (
           <div className="image-mode">
             <p className="mode-description">
               Upload a photo of the product. We'll identify it and find the best price online.
             </p>
             
             <div className="image-upload-area">
-              <label className="upload-label">
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleImageSelect}
-                />
+              <button 
+                className="upload-label" 
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+              >
                 <Camera size={32} />
                 <span>Click to upload or take a photo</span>
-              </label>
+              </button>
             </div>
             
             {error && <p className="error-message">{error}</p>}
@@ -466,6 +518,59 @@ export default function AddItemModal({ onClose, onSuccess, apiBase }) {
                 />
                 <span className="form-hint">Where did you buy it?</span>
               </div>
+              
+              {/* Variant fields - only show if we detected any */}
+              {(variantsInput.color || variantsInput.size || variantsInput.quantity || variantsInput.model) && (
+                <div className="variants-section">
+                  <label className="variants-label">Variants (for accurate matching)</label>
+                  <div className="variants-grid">
+                    {variantsInput.color && (
+                      <div className="variant-chip">
+                        <span className="variant-type">Color</span>
+                        <input
+                          type="text"
+                          value={variantsInput.color}
+                          onChange={(e) => setVariantsInput({...variantsInput, color: e.target.value})}
+                          className="variant-input"
+                        />
+                      </div>
+                    )}
+                    {variantsInput.size && (
+                      <div className="variant-chip">
+                        <span className="variant-type">Size</span>
+                        <input
+                          type="text"
+                          value={variantsInput.size}
+                          onChange={(e) => setVariantsInput({...variantsInput, size: e.target.value})}
+                          className="variant-input"
+                        />
+                      </div>
+                    )}
+                    {variantsInput.quantity && (
+                      <div className="variant-chip">
+                        <span className="variant-type">Qty</span>
+                        <input
+                          type="text"
+                          value={variantsInput.quantity}
+                          onChange={(e) => setVariantsInput({...variantsInput, quantity: e.target.value})}
+                          className="variant-input"
+                        />
+                      </div>
+                    )}
+                    {variantsInput.model && (
+                      <div className="variant-chip">
+                        <span className="variant-type">Model</span>
+                        <input
+                          type="text"
+                          value={variantsInput.model}
+                          onChange={(e) => setVariantsInput({...variantsInput, model: e.target.value})}
+                          className="variant-input"
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
               
               {error && <p className="error-message">{error}</p>}
               
@@ -540,22 +645,22 @@ export default function AddItemModal({ onClose, onSuccess, apiBase }) {
               <p className="form-help">
                 Can't find what you're looking for?
               </p>
-              <button 
-                className="btn btn-link"
-                onClick={() => {
-                  // Allow manual entry
-                  setSelectedOption({ manual: true });
-                  setManualData({
-                    name: identifiedProduct?.itemName || '',
-                    url: '',
-                    price: '',
-                    imageUrl: imagePreview || '',
-                    storeName: ''
-                  });
-                }}
-              >
-                Enter details manually
-              </button>
+                <button 
+                  className="btn btn-link"
+                  onClick={() => {
+                    // Allow manual entry - use server-side image URL, not blob URL
+                    setSelectedOption({ manual: true });
+                    setManualData({
+                      name: identifiedProduct?.itemName || '',
+                      url: '',
+                      price: '',
+                      imageUrl: identifiedProduct?.localImageUrl || '',
+                      storeName: ''
+                    });
+                  }}
+                >
+                  Enter details manually
+                </button>
             </div>
             
             {error && <p className="error-message">{error}</p>}

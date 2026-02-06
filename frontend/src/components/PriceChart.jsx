@@ -10,6 +10,19 @@ import {
 } from 'recharts';
 import './PriceChart.css';
 
+// Custom tooltip - defined outside component to prevent re-creation
+const CustomTooltip = ({ active, payload }) => {
+  if (active && payload && payload.length) {
+    return (
+      <div className="chart-tooltip">
+        <p className="tooltip-price">£{payload[0].value.toFixed(2)}</p>
+        <p className="tooltip-date">{payload[0].payload.fullDate}</p>
+      </div>
+    );
+  }
+  return null;
+};
+
 export default function PriceChart({ data }) {
   // Format data for the chart
   const chartData = data.map(entry => ({
@@ -27,27 +40,14 @@ export default function PriceChart({ data }) {
   const maxPrice = Math.max(...prices);
   const padding = (maxPrice - minPrice) * 0.1 || maxPrice * 0.1;
 
-  // Custom tooltip
-  const CustomTooltip = ({ active, payload }) => {
-    if (active && payload && payload.length) {
-      return (
-        <div className="chart-tooltip">
-          <p className="tooltip-price">£{payload[0].value.toFixed(2)}</p>
-          <p className="tooltip-date">{payload[0].payload.fullDate}</p>
-        </div>
-      );
-    }
-    return null;
-  };
-
   return (
     <div className="price-chart">
       <ResponsiveContainer width="100%" height={300}>
-        <LineChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
+        <LineChart data={chartData} margin={{ top: 10, right: 10, left: -10, bottom: 10 }}>
           <defs>
             <linearGradient id="priceGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#5be9b5" stopOpacity={0.3}/>
-              <stop offset="95%" stopColor="#5be9b5" stopOpacity={0}/>
+              <stop offset="5%" stopColor="#4ECDC4" stopOpacity={0.3}/>
+              <stop offset="95%" stopColor="#4ECDC4" stopOpacity={0}/>
             </linearGradient>
           </defs>
           
@@ -60,16 +60,17 @@ export default function PriceChart({ data }) {
           <XAxis 
             dataKey="date" 
             stroke="#6b6762"
-            fontSize={12}
+            fontSize={9}
             tickLine={false}
             axisLine={{ stroke: 'rgba(255,255,255,0.08)' }}
           />
           
           <YAxis 
             stroke="#6b6762"
-            fontSize={12}
+            fontSize={9}
             tickLine={false}
             axisLine={false}
+            width={45}
             domain={[minPrice - padding, maxPrice + padding]}
             tickFormatter={(value) => `£${value.toFixed(0)}`}
           />
@@ -79,7 +80,7 @@ export default function PriceChart({ data }) {
           {/* Reference line for lowest price */}
           <ReferenceLine 
             y={minPrice} 
-            stroke="#5be9b5" 
+            stroke="#4ECDC4" 
             strokeDasharray="5 5"
             strokeOpacity={0.5}
           />
@@ -87,16 +88,16 @@ export default function PriceChart({ data }) {
           <Line 
             type="monotone" 
             dataKey="price" 
-            stroke="#5be9b5"
+            stroke="#4ECDC4"
             strokeWidth={2}
             dot={{ 
-              fill: '#5be9b5', 
+              fill: '#4ECDC4', 
               strokeWidth: 2,
               r: 4
             }}
             activeDot={{ 
               r: 6, 
-              fill: '#5be9b5',
+              fill: '#4ECDC4',
               stroke: '#fff',
               strokeWidth: 2
             }}

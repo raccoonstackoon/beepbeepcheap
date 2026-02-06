@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Check, RotateCcw, PenLine } from 'lucide-react';
+import { Check, RotateCcw, PenLine, X } from 'lucide-react';
 import './ImageAnnotator.css';
 
 /**
@@ -14,7 +14,7 @@ import './ImageAnnotator.css';
  * - onCancel: Callback when user wants to go back (required)
  * - mode: 'pricetag' or 'product' - affects the instruction text (optional)
  */
-export default function ImageAnnotator({ imageUrl, onConfirm, onCancel, mode = 'pricetag' }) {
+export default function ImageAnnotator({ imageUrl, onConfirm, onCancel }) {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const imageRef = useRef(null);
@@ -233,35 +233,8 @@ export default function ImageAnnotator({ imageUrl, onConfirm, onCancel, mode = '
     onConfirm(focusArea);
   }, [onConfirm]);
 
-  // Get instruction text based on mode
-  const getInstructions = () => {
-    if (mode === 'pricetag') {
-      return {
-        title: 'Circle the Price Area',
-        description: 'Draw around the price tag or product name'
-      };
-    }
-    return {
-      title: 'Circle the Product',
-      description: 'Draw around the product you want to track'
-    };
-  };
-
-  const instructions = getInstructions();
-
   return (
     <div className="image-annotator">
-      {/* Instructions */}
-      <div className="annotator-instructions">
-        <div className="instruction-icon">
-          <PenLine size={20} />
-        </div>
-        <div className="instruction-text">
-          <h4>{instructions.title}</h4>
-          <p>{instructions.description}</p>
-        </div>
-      </div>
-
       {/* Canvas container */}
       <div 
         className="annotator-container"
@@ -291,26 +264,49 @@ export default function ImageAnnotator({ imageUrl, onConfirm, onCancel, mode = '
           onTouchCancel={handleEnd}
         />
         
+        {/* Top right button group */}
+        <div className="canvas-buttons">
+          {hasDrawn && (
+            <button 
+              className="canvas-btn" 
+              onClick={(e) => {
+                e.stopPropagation();
+                handleClear();
+              }}
+              onTouchStart={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
+              title="Clear drawing"
+            >
+              <RotateCcw size={16} />
+            </button>
+          )}
+          <button 
+            className="canvas-btn canvas-btn-close" 
+            onClick={(e) => {
+              e.stopPropagation();
+              onCancel();
+            }}
+            onTouchStart={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+            title="Close"
+          >
+            <X size={16} />
+          </button>
+        </div>
+        
         {/* Visual hint when no drawing yet */}
         {!hasDrawn && dimensions.width > 0 && (
           <div className="draw-hint">
-            <PenLine size={32} />
-            <span>Draw here</span>
+            <div className="draw-hint-box">
+              <PenLine size={20} />
+              <span>Circle your product</span>
+            </div>
           </div>
         )}
       </div>
 
-      {/* Helper text */}
-      <p className="annotator-help">
-        ✏️ Draw a circle or line around the area you want to mark
-      </p>
-
       {/* Actions */}
       <div className="annotator-actions">
-        <button className="btn btn-ghost" onClick={handleClear} disabled={!hasDrawn}>
-          <RotateCcw size={16} />
-          Clear
-        </button>
         <div className="action-group">
           <button className="btn btn-secondary" onClick={onCancel}>
             Back

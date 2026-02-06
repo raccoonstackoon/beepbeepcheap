@@ -66,7 +66,6 @@ export default function ItemCard({ item, apiBase, onRefresh, style }) {
     : 0;
 
   const isDropped = priceChange < 0;
-  const isIncreased = priceChange > 0;
 
   return (
     <Link 

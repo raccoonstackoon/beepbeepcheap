@@ -5,80 +5,79 @@ import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 puppeteer.use(StealthPlugin());
 
 /**
- * Extract store name from URL
+ * Extract store name from URL - DYNAMIC approach
+ * Extracts the brand/store name from the domain, handles edge cases
  */
-function getStoreName(url) {
+export function getStoreName(url) {
   try {
     const hostname = new URL(url).hostname.toLowerCase();
     
-    const storeMap = {
-      'amazon': 'Amazon',
-      'walmart': 'Walmart',
-      'target': 'Target',
-      'bestbuy': 'Best Buy',
-      'costco': 'Costco',
-      'homedepot': 'Home Depot',
-      'lowes': "Lowe's",
-      'macys': "Macy's",
-      'nordstrom': 'Nordstrom',
-      'kohls': "Kohl's",
-      'ebay': 'eBay',
-      'etsy': 'Etsy',
-      'wayfair': 'Wayfair',
-      'ikea': 'IKEA',
-      'newegg': 'Newegg',
-      'bhphotovideo': 'B&H Photo',
-      'adorama': 'Adorama',
-      'zappos': 'Zappos',
-      'nike': 'Nike',
-      'adidas': 'Adidas',
-      'apple': 'Apple',
-      'samsung': 'Samsung',
-      'lg': 'LG',
-      'currys': 'Currys',
-      'argos': 'Argos',
-      'johnlewis': 'John Lewis',
-      'ao': 'AO',
-      'sephora': 'Sephora',
-      'ulta': 'Ulta',
-      'rei': 'REI',
-      'dickssportinggoods': "Dick's Sporting Goods",
-      'gamestop': 'GameStop',
-      'staples': 'Staples',
-      'officedepot': 'Office Depot',
-      'microcenter': 'Micro Center',
-      // H&M Group brands
-      'cos.com': 'COS',
+    // Only keep mappings for domains that don't match their display name
+    // (e.g., diy.com → B&Q, or special formatting like eBay, IKEA)
+    const specialCases = {
+      'diy.com': 'B&Q',
+      'ao.com': 'AO.com',
       'hm.com': 'H&M',
-      'stories.com': '& Other Stories',
-      'arket.com': 'ARKET',
-      // Other fashion
-      'zara.com': 'Zara',
-      'uniqlo.com': 'Uniqlo',
-      'asos.com': 'ASOS',
-      'net-a-porter': 'Net-a-Porter',
-      'mrporter': 'Mr Porter',
-      'ssense': 'SSENSE',
-      'farfetch': 'Farfetch',
-      'revolve': 'Revolve',
     };
     
-    for (const [key, name] of Object.entries(storeMap)) {
-      if (hostname.includes(key)) {
+    // Check special cases first
+    for (const [domain, name] of Object.entries(specialCases)) {
+      if (hostname.includes(domain)) {
         return name;
       }
     }
     
-    // Extract domain name as fallback
+    // Dynamic extraction from hostname
+    // Remove www. and split by dots
     const parts = hostname.replace('www.', '').split('.');
-    if (parts.length > 0) {
-      return parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
+    
+    // Generic parts to skip (TLDs, country codes, subdomains, common URL patterns)
+    const genericParts = [
+      // Subdomains
+      'shop', 'store', 'm', 'mobile', 'www', 'web', 'online', 'buy', 'secure', 'checkout',
+      'link', 'links', 'go', 'click', 'redirect', 'track', 'out', 'ref', 'aff', 'affiliate',
+      // Country codes & TLDs
+      'uk', 'eu', 'us', 'de', 'fr', 'es', 'it', 'nl', 'be', 'au', 'ca', 'ie', 'nz', 'in', 'jp', 'cn',
+      'co', 'com', 'org', 'net', 'io', 'app', 'en', 'gb', 'info', 'biz', 'me', 'tv'
+    ];
+    
+    // Find the main brand name (first non-generic part)
+    for (const part of parts) {
+      if (part.length > 1 && !genericParts.includes(part)) {
+        // Smart capitalization
+        return smartCapitalize(part);
+      }
     }
     
     return 'Unknown Store';
   } catch {
     return 'Unknown Store';
   }
+}
+
+/**
+ * Smart capitalize store names
+ * Handles camelCase, common patterns, and acronyms
+ */
+function smartCapitalize(name) {
+  // Check for known acronyms/special capitalizations
+  const upperCaseNames = ['ikea', 'asos', 'asda', 'hbo', 'bbc', 'dhl', 'ups', 'ibm'];
+  if (upperCaseNames.includes(name.toLowerCase())) {
+    return name.toUpperCase();
+  }
+  
+  // Check for camelCase patterns (e.g., "johnlewis" → "John Lewis")
+  // Insert space before capital letters, then capitalize first letter of each word
+  const withSpaces = name
+    .replace(/([a-z])([A-Z])/g, '$1 $2')  // camelCase
+    .replace(/([a-z])(\d)/g, '$1 $2')      // letters followed by numbers
+    .replace(/and/gi, '&');                 // "and" → "&"
+  
+  // Capitalize first letter of each word
+  return withSpaces
+    .split(/[\s-]+/)
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ');
 }
 
 /**
@@ -274,8 +273,11 @@ export async function scrapeProduct(url) {
       }
     }
     
-    // Get store name from URL
-    const storeName = getStoreName(url);
+    // Get store name from FINAL URL (after all redirects)
+    // This handles tracking URLs like duckduckgo, redbrain, etc.
+    const finalUrl = page.url();
+    const storeName = getStoreName(finalUrl);
+    console.log(`📍 Final URL: ${finalUrl}`);
     console.log(`📍 Store detected: ${storeName}`);
     
     // Extract product information with store-specific and generic strategies
@@ -1965,13 +1967,6 @@ export async function searchDuckDuckGoShopping(searchQuery) {
     const results = await page.evaluate(() => {
       const items = [];
       
-      // Known store patterns for display names
-      const storePatterns = [
-        'Amazon UK', 'Amazon', 'eBay UK', 'eBay', 'Boots.com', 'Boots', 
-        'ASOS', 'Superdrug', 'Tesco', 'OnBuy.com', 'OnBuy', 'Argos',
-        'John Lewis', 'Currys', 'Sainsburys', 'Very', 'Next'
-      ];
-      
       // Find all LI elements that contain price patterns
       const allLis = document.querySelectorAll('li');
       
@@ -1989,59 +1984,141 @@ export async function searchDuckDuckGoShopping(searchQuery) {
           
           // Find the link inside
           const link = li.querySelector('a');
-          const href = link?.getAttribute('href') || '';
+          let href = link?.getAttribute('href') || '';
           
           // Skip if no link
           if (!href) continue;
           
-          // Get all text lines
-          const lines = text.split('\n').filter(l => l.trim().length > 0);
+          // DuckDuckGo uses tracking URLs - try to extract the actual URL
+          // Format: //links.duckduckgo.com/d.js?uddg=https%3A%2F%2Fwww.ebay.co.uk%2F...
+          if (href.includes('duckduckgo.com') || href.includes('uddg=')) {
+            try {
+              const uddgMatch = href.match(/uddg=([^&]+)/);
+              if (uddgMatch) {
+                href = decodeURIComponent(uddgMatch[1]);
+              }
+            } catch (e) {}
+          }
           
-          // First meaningful line is usually the title (skip "Free shipping" etc)
+          // ═══════════════════════════════════════════════════════════════════
+          // DYNAMIC STORE NAME EXTRACTION
+          // DuckDuckGo format: "[Free shipping] Product Title £price [£was] Store Name"
+          // Store name is typically the LAST segment after all prices
+          // ═══════════════════════════════════════════════════════════════════
+          
+          // Find all prices in the text
+          const allPrices = text.match(/£\d+\.?\d*/g) || [];
+          
+          // Get text after the last price - this often contains the store name
+          let storeName = '';
+          if (allPrices.length > 0) {
+            const lastPrice = allPrices[allPrices.length - 1];
+            const lastPriceIndex = text.lastIndexOf(lastPrice);
+            const afterPrice = text.substring(lastPriceIndex + lastPrice.length).trim();
+            
+            // Clean up the store name - remove newlines, take first meaningful segment
+            const storeCandidate = afterPrice.split('\n')[0].trim();
+            
+            // Validate: store name should be 2-50 chars, not a price, not common junk
+            if (storeCandidate.length >= 2 && 
+                storeCandidate.length <= 50 && 
+                !storeCandidate.startsWith('£') &&
+                !storeCandidate.match(/^\d+$/) &&
+                !storeCandidate.toLowerCase().includes('free shipping') &&
+                !storeCandidate.toLowerCase().includes('add to') &&
+                !storeCandidate.toLowerCase().includes('view deal')) {
+              storeName = storeCandidate;
+            }
+          }
+          
+          // Fallback: check the last line of text
+          if (!storeName) {
+            const lines = text.split('\n').filter(l => l.trim().length > 0);
+            if (lines.length > 1) {
+              const lastLine = lines[lines.length - 1].trim();
+              if (lastLine.length >= 2 && 
+                  lastLine.length <= 50 && 
+                  !lastLine.startsWith('£') &&
+                  !lastLine.match(/^\d+$/)) {
+                storeName = lastLine;
+              }
+            }
+          }
+          
+          // ═══════════════════════════════════════════════════════════════════
+          // EXTRACT PRODUCT TITLE
+          // Title is usually the longest text segment before the price
+          // ═══════════════════════════════════════════════════════════════════
+          
+          const lines = text.split('\n').filter(l => l.trim().length > 0);
           let title = '';
+          
           for (const line of lines) {
-            const trimmed = line.trim();
-            if (trimmed.length > 20 && !trimmed.startsWith('£') && !trimmed.startsWith('Free')) {
+            let trimmed = line.trim();
+            
+            // Remove "Free shipping" prefix but keep the rest
+            if (trimmed.toLowerCase().startsWith('free shipping')) {
+              trimmed = trimmed.substring(13).trim();
+            } else if (trimmed.toLowerCase().startsWith('freeshipping')) {
+              trimmed = trimmed.substring(12).trim();
+            }
+            
+            // Skip price lines, very short lines, and the store name line
+            if (trimmed.startsWith('£') || trimmed.length < 10) continue;
+            if (storeName && trimmed === storeName) continue;
+            
+            // This looks like a product title
+            if (trimmed.length > 15) {
               title = trimmed;
               break;
             }
           }
           
-          // If still no title, use first line
+          // Fallback: use first meaningful line
           if (!title && lines.length > 0) {
-            title = lines[0].trim();
-          }
-          
-          // Find store name from text
-          let storeName = '';
-          for (const store of storePatterns) {
-            if (text.includes(store)) {
-              storeName = store;
-              break;
+            let firstLine = lines[0].trim();
+            if (firstLine.toLowerCase().startsWith('free shipping')) {
+              firstLine = firstLine.substring(13).trim();
             }
+            title = firstLine;
           }
           
-          // Get image if available
+          // Clean up title - remove price and store from end if present
+          if (storeName && title.endsWith(storeName)) {
+            title = title.substring(0, title.length - storeName.length).trim();
+          }
+          // Remove trailing prices from title
+          title = title.replace(/£\d+\.?\d*\s*£?\d*\.?\d*\s*$/, '').trim();
+          
+          // ═══════════════════════════════════════════════════════════════════
+          // GET IMAGE AND PRICE
+          // ═══════════════════════════════════════════════════════════════════
+          
           let imageUrl = null;
           const img = li.querySelector('img[src]');
           if (img) {
-            imageUrl = img.getAttribute('src');
+            let src = img.getAttribute('src');
+            if (src && src.startsWith('//')) {
+              src = 'https:' + src;
+            }
+            imageUrl = src;
           }
           
-          // Extract price
+          // Extract price (first price is usually the current/sale price)
           const price = parseFloat(priceMatch[1]);
           
-          // Skip duplicates (by title similarity)
+          // Skip duplicates
+          const titleStart = title.substring(0, 40).toLowerCase();
           const isDuplicate = items.some(item => 
-            item.title.substring(0, 30) === title.substring(0, 30) && 
-            item.storeName === storeName
+            item.title.substring(0, 40).toLowerCase() === titleStart && 
+            Math.abs(item.price - price) < 1
           );
           if (isDuplicate) continue;
           
           items.push({
             title: title.substring(0, 200),
             price,
-            storeName,
+            storeName: storeName || 'Unknown',
             productUrl: href,
             imageUrl
           });
@@ -2644,6 +2721,177 @@ export async function searchStoreForProduct(storeName, productName, targetPrice 
     console.error('❌ Store search error:', error.message);
     return {
       success: false,
+      error: error.message
+    };
+  }
+}
+
+/**
+ * Search Costco UK for a product
+ * Costco doesn't appear in DuckDuckGo Shopping, so we search directly
+ */
+export async function searchCostco(searchQuery) {
+  let browser;
+  
+  try {
+    console.log(`🏪 Costco UK search for: ${searchQuery}`);
+    
+    browser = await puppeteer.launch({
+      headless: 'new',
+      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+    });
+    
+    const page = await browser.newPage();
+    
+    await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+    
+    // Build Costco UK search URL
+    const searchUrl = `https://www.costco.co.uk/search?text=${encodeURIComponent(searchQuery)}`;
+    console.log(`📍 Costco URL: ${searchUrl}`);
+    
+    await page.goto(searchUrl, { 
+      waitUntil: 'networkidle2',
+      timeout: 30000 
+    });
+    
+    // Wait for results to load
+    await page.waitForSelector('.product-list, .no-results, .product-tile', { timeout: 10000 }).catch(() => {});
+    
+    // Extract product results - Costco UK uses a specific structure
+    const results = await page.evaluate(() => {
+      const items = [];
+      
+      // Costco uses list items with product info in the structure
+      // The full text is in the listitem, price at the start
+      const productListItems = document.querySelectorAll('.product-list-view li, .product-tile, [class*="product"] li, .search-results li');
+      
+      for (const item of productListItems) {
+        try {
+          const fullText = item.innerText || '';
+          
+          // Skip non-product items (navigation, filters, etc.)
+          if (fullText.length < 30 || !fullText.includes('£')) continue;
+          
+          // Extract price from the text (format: "£99.99" or "£1,899.99")
+          const priceMatch = fullText.match(/£([\d,]+\.?\d*)/);
+          if (!priceMatch) continue;
+          const price = parseFloat(priceMatch[1].replace(',', ''));
+          
+          // Get product link and title
+          const linkEl = item.querySelector('a[href*="/p/"], a[href*="/product/"]');
+          if (!linkEl) continue;
+          
+          let productUrl = linkEl.getAttribute('href') || '';
+          if (productUrl && !productUrl.startsWith('http')) {
+            productUrl = 'https://www.costco.co.uk' + productUrl;
+          }
+          
+          // Title from link text (Costco has the product name in the link)
+          let title = linkEl.textContent?.trim() || '';
+          
+          // If title is too short, try other methods
+          if (!title || title.length < 10) {
+            // Look for other product name elements
+            const nameEl = item.querySelector('.product-name, .product-title, h2, h3, [class*="name"], [class*="title"]');
+            if (nameEl) {
+              title = nameEl.textContent?.trim() || '';
+            }
+          }
+          
+          // Last resort: parse from full text, skip price and "Shipping Included"
+          if (!title || title.length < 10) {
+            // Remove price and shipping info to find product name
+            let cleanText = fullText
+              .replace(/£[\d,]+\.?\d*/g, '')  // Remove prices
+              .replace(/Shipping Included\s*\*/gi, '')  // Remove shipping text
+              .replace(/\s+/g, ' ')  // Normalize whitespace
+              .trim();
+            
+            // Take first meaningful chunk (usually product name)
+            const parts = cleanText.split(' - ');
+            title = parts[0]?.trim() || cleanText.substring(0, 100);
+          }
+          
+          // Get image
+          const imgEl = item.querySelector('img');
+          const imageUrl = imgEl?.src || imgEl?.getAttribute('data-src') || '';
+          
+          if (title && price && productUrl) {
+            items.push({
+              title,
+              price,
+              productUrl,
+              imageUrl,
+              storeName: 'Costco UK'
+            });
+          }
+        } catch (e) {
+          // Skip problematic items
+        }
+      }
+      
+      // Also try the newer Costco structure with data attributes
+      if (items.length === 0) {
+        const altProducts = document.querySelectorAll('[data-cnstrc-item], .product, .product-item');
+        for (const prod of altProducts) {
+          try {
+            const priceText = prod.innerText || '';
+            const priceMatch = priceText.match(/£([\d,]+\.?\d*)/);
+            if (!priceMatch) continue;
+            
+            const price = parseFloat(priceMatch[1].replace(',', ''));
+            const linkEl = prod.querySelector('a');
+            if (!linkEl) continue;
+            
+            let productUrl = linkEl.getAttribute('href') || '';
+            if (productUrl && !productUrl.startsWith('http')) {
+              productUrl = 'https://www.costco.co.uk' + productUrl;
+            }
+            
+            const title = linkEl.textContent?.trim() || prod.querySelector('h2, h3, .name, .title')?.textContent?.trim() || '';
+            const imgEl = prod.querySelector('img');
+            const imageUrl = imgEl?.src || '';
+            
+            if (title && price && productUrl) {
+              items.push({
+                title,
+                price,
+                productUrl,
+                imageUrl,
+                storeName: 'Costco UK'
+              });
+            }
+          } catch (e) {}
+        }
+      }
+      
+      return items;
+    });
+    
+    await browser.close();
+    
+    console.log(`📊 Costco found ${results.length} products`);
+    
+    // Log first few results
+    for (const r of results.slice(0, 3)) {
+      console.log(`   £${r.price?.toFixed(2)} - ${r.title?.substring(0, 50)}...`);
+    }
+    
+    return {
+      success: true,
+      results,
+      searchUrl
+    };
+    
+  } catch (error) {
+    if (browser) {
+      await browser.close();
+    }
+    
+    console.error('❌ Costco search error:', error.message);
+    return {
+      success: false,
+      results: [],
       error: error.message
     };
   }

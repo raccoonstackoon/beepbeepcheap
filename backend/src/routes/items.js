@@ -3,7 +3,7 @@ import multer from 'multer';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import * as queries from '../database/queries.js';
-import { scrapeProduct, scrapePrice, searchDuckDuckGoShopping } from '../services/scraper.js';
+import { scrapeProduct, scrapePrice, searchDuckDuckGoShopping, searchCostco, getStoreName } from '../services/scraper.js';
 import { processImage } from '../services/imageProcessor.js';
 
 const router = express.Router();
@@ -122,7 +122,10 @@ router.post('/image', upload.single('image'), async (req, res) => {
     }
     
     const imagePath = req.file.path;
-    const imageUrl = `/uploads/${req.file.filename}`;
+    // Create full URL for the uploaded image (not just relative path)
+    const host = req.get('host');
+    const protocol = req.protocol;
+    const imageUrl = `${protocol}://${host}/uploads/${req.file.filename}`;
     const identifyOnly = req.body.identifyOnly === 'true';
     const userProvidedShop = req.body.shopName?.trim() || null;
     
@@ -261,19 +264,53 @@ router.post('/image', upload.single('image'), async (req, res) => {
 // POST /api/items/manual - Add item manually (after image processing or manual entry)
 router.post('/manual', (req, res) => {
   try {
-    const { name, url, image_url, current_price } = req.body;
+    const { name, url, image_url, current_price, store_name } = req.body;
+    
+    console.log(`📥 Manual item request received:`);
+    console.log(`   - Name: ${name}`);
+    console.log(`   - URL: ${url || 'none'}`);
+    console.log(`   - Image URL received: ${image_url || 'NONE'}`);
+    console.log(`   - Store: ${store_name || 'none'}`);
     
     if (!name) {
       return res.status(400).json({ error: 'Item name is required' });
     }
     
+    // Fix image URL issues
+    let finalImageUrl = image_url || null;
+    if (finalImageUrl) {
+      // Convert relative /uploads/ paths to full URLs
+      if (finalImageUrl.startsWith('/uploads/')) {
+        const host = req.get('host');
+        const protocol = req.protocol;
+        finalImageUrl = `${protocol}://${host}${finalImageUrl}`;
+        console.log(`   - Converted relative path to: ${finalImageUrl}`);
+      }
+      // Fix protocol-relative URLs
+      else if (finalImageUrl.startsWith('//')) {
+        finalImageUrl = 'https:' + finalImageUrl;
+        console.log(`   - Fixed protocol-relative URL to: ${finalImageUrl}`);
+      }
+      // Reject blob URLs (they don't persist)
+      else if (finalImageUrl.startsWith('blob:')) {
+        console.warn('⚠️ Blob URL received for image, ignoring:', finalImageUrl);
+        finalImageUrl = null;
+      }
+    }
+    
+    console.log(`   - Final image URL to save: ${finalImageUrl || 'NONE'}`);
+    
     const item = queries.createItem({
       name,
       url: url || null,
-      image_url: image_url || null,
+      image_url: finalImageUrl,
+      store_name: store_name || null,
       current_price: current_price ? parseFloat(current_price) : null,
       original_price: current_price ? parseFloat(current_price) : null
     });
+    
+    console.log(`📌 Added item manually: "${name}" at ${store_name || 'Unknown'} for £${current_price || 'N/A'}`);
+    console.log(`   - Saved with image_url: ${item.image_url || 'NONE'}`);
     
     res.json(item);
   } catch (error) {
@@ -300,6 +337,7 @@ router.put('/:id', (req, res) => {
 });
 
 // POST /api/items/:id/refresh - Manually refresh price for an item
+// Also fetches image and store name if missing, and fixes DuckDuckGo tracking URLs
 router.post('/:id/refresh', async (req, res) => {
   try {
     const id = parseInt(req.params.id);
@@ -314,13 +352,121 @@ router.post('/:id/refresh', async (req, res) => {
     }
     
     console.log(`Refreshing price for: ${item.name}`);
-    const newPrice = await scrapePrice(item.url);
+    
+    // Check if URL is a DuckDuckGo tracking URL - if so, try to extract real URL
+    let urlToScrape = item.url;
+    let fixedUrl = null;
+    let extractedStoreName = null;
+    
+    if (item.url.includes('duckduckgo.com') || item.url.includes('links.duckduckgo')) {
+      console.log(`🔗 Detected DuckDuckGo tracking URL, extracting real URL...`);
+      
+      // Method 1: Extract from ad_domain parameter (easiest)
+      const adDomainMatch = item.url.match(/ad_domain=([^&]+)/);
+      if (adDomainMatch) {
+        const domain = decodeURIComponent(adDomainMatch[1]);
+        extractedStoreName = getStoreName('https://' + domain);
+        console.log(`   - Found ad_domain: ${domain} → Store: ${extractedStoreName}`);
+      }
+      
+      // Method 2: Extract actual URL from spld JSON (contains base64 encoded URL in "u" field)
+      const spldMatch = item.url.match(/spld=([^&]+)/);
+      if (spldMatch) {
+        try {
+          const spldJson = JSON.parse(decodeURIComponent(spldMatch[1]));
+          if (spldJson.u) {
+            // The "u" field is base64 encoded, then URL encoded
+            const base64Url = spldJson.u;
+            fixedUrl = decodeURIComponent(Buffer.from(base64Url, 'base64').toString('utf-8'));
+            urlToScrape = fixedUrl;
+            console.log(`   - Extracted real URL: ${fixedUrl}`);
+          }
+        } catch (e) {
+          console.log(`   - Failed to decode spld: ${e.message}`);
+        }
+      }
+      
+      // Method 3: Fallback to uddg parameter
+      if (!fixedUrl) {
+        const uddgMatch = item.url.match(/uddg=([^&]+)/);
+        if (uddgMatch) {
+          try {
+            fixedUrl = decodeURIComponent(uddgMatch[1]);
+            urlToScrape = fixedUrl;
+            console.log(`   - Extracted from uddg: ${fixedUrl}`);
+          } catch (e) {
+            console.log(`   - Failed to decode uddg`);
+          }
+        }
+      }
+    }
+    
+    // If image or store name is missing/bad, do a full scrape
+    // Otherwise just get the price (faster)
+    let newPrice = null;
+    let newImageUrl = null;
+    let newStoreName = null;
+    
+    // Check if store name is a bad/tracking domain that needs fixing
+    const badStoreNames = ['links', 'duckduckgo', 'redbrain', 'unknown', 'shop', 'uk'];
+    const storeNameIsBad = item.store_name && badStoreNames.includes(item.store_name.toLowerCase());
+    
+    // Always do a full scrape when user clicks refresh - they want fresh data!
+    const needsFullScrape = true;
+    
+    if (needsFullScrape) {
+      console.log(`🔄 Item ${id} doing full scrape...`);
+      console.log(`   - Missing image: ${!item.image_url}`);
+      console.log(`   - Missing store: ${!item.store_name}`);
+      console.log(`   - Bad store name: ${storeNameIsBad ? item.store_name : 'NO'}`);
+      console.log(`   - URL needs fixing: ${!!fixedUrl}`);
+      const scraped = await scrapeProduct(urlToScrape);
+      newPrice = scraped.price;
+      newImageUrl = scraped.imageUrl;
+      newStoreName = scraped.storeName;
+      console.log(`   - Found image: ${newImageUrl ? 'YES' : 'NO'}`);
+      console.log(`   - Image URL: ${newImageUrl || 'NONE'}`);
+      console.log(`   - Found store: ${newStoreName || 'NO'}`);
+    } else {
+      newPrice = await scrapePrice(urlToScrape);
+    }
     
     if (newPrice === null) {
       return res.status(400).json({ error: 'Could not fetch current price' });
     }
     
-    const updatedItem = queries.updateItemPrice(id, newPrice);
+    // Update price
+    let updatedItem = queries.updateItemPrice(id, newPrice);
+    
+    // Update image, store name, and/or URL if needed
+    const updates = {};
+    // Always update image if we got a fresh one (user clicked refresh for a reason!)
+    if (newImageUrl) {
+      updates.image_url = newImageUrl;
+      console.log(`   ✅ Updating image URL`);
+    }
+    
+    // Use extracted store name from ad_domain OR scraped store name
+    // Override bad store names like "Links", "Duckduckgo", "Redbrain" etc.
+    if (extractedStoreName) {
+      // Always trust the ad_domain extracted store name
+      updates.store_name = extractedStoreName;
+      console.log(`   ✅ Using ad_domain store name: ${extractedStoreName}`);
+    } else if (newStoreName && (storeNameIsBad || !item.store_name)) {
+      // Use scraped store name if current one is bad or missing
+      updates.store_name = newStoreName;
+      console.log(`   ✅ Using scraped store name: ${newStoreName}`);
+    }
+    
+    if (fixedUrl) {
+      updates.url = fixedUrl;
+    }
+    
+    if (Object.keys(updates).length > 0) {
+      updatedItem = queries.updateItem(id, updates);
+      console.log(`📝 Updated item ${id}:`, updates);
+    }
+    
     res.json(updatedItem);
   } catch (error) {
     console.error('Error refreshing price:', error);
@@ -337,6 +483,291 @@ router.delete('/:id', (req, res) => {
   } catch (error) {
     console.error('Error deleting item:', error);
     res.status(500).json({ error: 'Failed to delete item' });
+  }
+});
+
+// GET /api/items/:id/alternatives - Find the same product CHEAPER at other stores
+// DuckDuckGo already searches for the full product name (including size/model)
+// We just verify: Brand + key product words, then sort by CHEAPEST price
+// Only returns results that are CHEAPER than current price!
+router.get('/:id/alternatives', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const item = queries.getItemById(id);
+    
+    if (!item) {
+      return res.status(404).json({ error: 'Item not found' });
+    }
+    
+    if (!item.name) {
+      return res.status(400).json({ error: 'Item has no name to search for' });
+    }
+    
+    // Clean up the product name
+    const cleanName = item.name.replace(/\s+/g, ' ').trim();
+    
+    console.log(`🔍 Finding cheaper prices for: ${cleanName}`);
+    console.log(`   Current store: ${item.store_name || 'Unknown'}`);
+    console.log(`   Current price: £${item.current_price || 'N/A'}`);
+    
+    // ═══════════════════════════════════════════════════════════════════════
+    // Extract BRAND + PRODUCT NAME for strict matching
+    // Examples:
+    //   "Tefal AeroSteam Garment Steamer" → brand=tefal, product=aerosteam
+    //   "Polycell Polyfilla Multi-Purpose" → brand=polycell, product=polyfilla
+    //   "Byredo La Tulipe Body Wash" → brand=byredo, product=la tulipe
+    // ═══════════════════════════════════════════════════════════════════════
+    
+    const words = cleanName.split(/\s+/).filter(w => w.length > 0);
+    
+    // Generic words that don't identify a specific product
+    const genericWords = new Set([
+      'garment', 'steamer', 'handheld', 'clothes', 'body', 'wash', 'lotion', 'cream',
+      'spray', 'powder', 'filler', 'multi-purpose', 'multipurpose', 'indoor', 'outdoor',
+      'plants', 'plant', 'killer', 'for', 'the', 'and', 'with', 'white', 'black', 'gold',
+      'rose', 'blue', 'red', 'green', 'grey', 'gray', 'silver', 'pink', 'purple', 'sage',
+      'small', 'medium', 'large', 'xl', 'xxl', 'mini', 'pro', 'plus', 'max', 'lite',
+      'ml', 'l', 'g', 'kg', 'oz', 'pack', 'set', 'bundle', 'kit', 'x2', 'x3', 'x4'
+    ]);
+    
+    // Find identifying words: brand + product name (skip generic descriptors)
+    const identifyingWords = [];
+    for (const word of words) {
+      const cleanWord = word.toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (cleanWord.length < 2) continue;
+      if (genericWords.has(cleanWord)) continue;
+      
+      identifyingWords.push(cleanWord);
+      
+      // Take first 2 meaningful words (brand + product line)
+      if (identifyingWords.length >= 2) break;
+    }
+    
+    // Also extract model number if present (e.g., DT9814G0)
+    const modelMatch = cleanName.match(/\b([A-Z]{1,3}\d{3,}[A-Z0-9]*)\b/i);
+    const modelNumber = modelMatch ? modelMatch[1].toLowerCase() : null;
+    
+    // ═══════════════════════════════════════════════════════════════════════
+    // Extract VARIANTS: any "number + unit" patterns (size, quantity, count, etc.)
+    // These MUST match for accurate comparison - 120 tablets ≠ 60 tablets!
+    // ═══════════════════════════════════════════════════════════════════════
+    
+    // Flexible pattern: find ALL "number + unit word" patterns in the name
+    // This catches: 225ml, 450g, 120 tablets, 24 count, 32 inch, 500ml, x2, 2 pack, etc.
+    // Excludes: model numbers (have letters before digits like DT9814), years (1900-2099)
+    const variantPatterns = [];
+    
+    // Pattern 1: number followed by unit word (e.g., "225ml", "120 tablets", "24 count")
+    const numberUnitMatches = cleanName.matchAll(/\b(\d+(?:\.\d+)?)\s*([a-zA-Z]{1,12})\b/gi);
+    for (const match of numberUnitMatches) {
+      const full = match[0].toLowerCase().replace(/\s+/g, '');
+      const num = match[1];
+      const unit = match[2].toLowerCase();
+      
+      // Skip if it looks like a model number (unit is all caps in original, or very short generic suffix)
+      // Skip years (4 digits starting with 19 or 20)
+      if (/^(19|20)\d{2}$/.test(num)) continue;
+      
+      // Skip generic suffixes that aren't size/quantity indicators
+      const skipUnits = ['th', 'st', 'nd', 'rd', 'am', 'pm', 'v', 'w']; // ordinals, time, voltage, watts
+      if (skipUnits.includes(unit)) continue;
+      
+      variantPatterns.push(full);
+    }
+    
+    // Pattern 2: "x" prefix quantities (e.g., "x2", "x3")
+    const xQuantityMatch = cleanName.match(/\bx(\d+)\b/i);
+    if (xQuantityMatch) {
+      variantPatterns.push(xQuantityMatch[0].toLowerCase());
+    }
+    
+    // Pattern 3: Letter sizes (S, M, L, XL, XXL, XS, etc.) - standalone or with "Size" prefix
+    const letterSizeMatches = cleanName.matchAll(/\b(size\s+)?(x{0,2}s|x{0,3}l|m)\b/gi);
+    for (const match of letterSizeMatches) {
+      // Normalize: "Size M" and "M" both become "m"
+      const size = match[0].toLowerCase().replace(/size\s*/i, '').trim();
+      if (size) variantPatterns.push(`size:${size}`);
+    }
+    
+    // Pattern 4: Numbered sizes with prefix (Size 10, UK 12, US 8, EU 40)
+    const numberedSizeMatches = cleanName.matchAll(/\b(size|uk|us|eu)\s*(\d+)\b/gi);
+    for (const match of numberedSizeMatches) {
+      variantPatterns.push(match[0].toLowerCase().replace(/\s+/g, ''));
+    }
+    
+    // Deduplicate and sort for consistent comparison
+    const variants = [...new Set(variantPatterns)].sort();
+    
+    console.log(`   🎯 Identifying words: [${identifyingWords.join(', ')}]`);
+    if (modelNumber) console.log(`   🎯 Model number: ${modelNumber}`);
+    if (variants.length > 0) console.log(`   🎯 Variants: [${variants.join(', ')}]`);
+    console.log(`   (from: "${cleanName.substring(0, 60)}...")`);
+    
+    // ═══════════════════════════════════════════════════════════════════════
+    // Search DuckDuckGo Shopping (searches full name including size/model)
+    // ═══════════════════════════════════════════════════════════════════════
+    const shoppingResults = await searchDuckDuckGoShopping(cleanName);
+    
+    // ═══════════════════════════════════════════════════════════════════════
+    // BONUS: Search Costco UK (doesn't appear in DuckDuckGo Shopping)
+    // ═══════════════════════════════════════════════════════════════════════
+    const costcoResults = await searchCostco(cleanName);
+    
+    // Combine results from both sources
+    const allResults = [
+      ...(shoppingResults.results || []),
+      ...(costcoResults.results || [])
+    ];
+    
+    if (allResults.length === 0) {
+      return res.json({
+        success: true,
+        alternatives: [],
+        message: 'No alternatives found',
+        searchQuery: cleanName
+      });
+    }
+    
+    // ═══════════════════════════════════════════════════════════════════════
+    // Filter: Brand + enough product keywords must match
+    // Show top 3 alternatives regardless of price, but flag if user has best price
+    // ═══════════════════════════════════════════════════════════════════════
+    const currentStoreLower = (item.store_name || '').toLowerCase();
+    const currentPrice = item.current_price || 0;
+    
+    const alternatives = allResults
+      .filter(r => {
+        const storeLower = (r.storeName || '').toLowerCase();
+        const titleLower = (r.title || '').toLowerCase();
+        
+        // Exclude same store
+        if (currentStoreLower && 
+            (storeLower.includes(currentStoreLower) || currentStoreLower.includes(storeLower))) {
+          return false;
+        }
+        
+        // Must have valid price
+        if (!r.price || r.price <= 0) return false;
+        
+        // ALL identifying words must appear in the alternative title
+        // e.g., for "Tefal AeroSteam...", both "tefal" AND "aerosteam" must appear
+        const allWordsMatch = identifyingWords.every(word => titleLower.includes(word));
+        if (!allWordsMatch) {
+          return false;
+        }
+        
+        // If we found a model number, it MUST also match
+        // This prevents showing DT3030 when user is tracking DT9814
+        if (modelNumber && !titleLower.includes(modelNumber)) {
+          return false;
+        }
+        
+        // ═══════════════════════════════════════════════════════════════════════
+        // VARIANT MATCHING: All variants must match!
+        // 120 tablets ≠ 60 tablets, 225ml ≠ 500ml
+        // ═══════════════════════════════════════════════════════════════════════
+        
+        if (variants.length > 0) {
+          // Extract variants from the alternative title using the same flexible pattern
+          const altVariants = [];
+          
+          const altNumberUnitMatches = titleLower.matchAll(/\b(\d+(?:\.\d+)?)\s*([a-zA-Z]{1,12})\b/gi);
+          for (const match of altNumberUnitMatches) {
+            const full = match[0].toLowerCase().replace(/\s+/g, '');
+            const num = match[1];
+            const unit = match[2].toLowerCase();
+            
+            if (/^(19|20)\d{2}$/.test(num)) continue;
+            const skipUnits = ['th', 'st', 'nd', 'rd', 'am', 'pm', 'v', 'w'];
+            if (skipUnits.includes(unit)) continue;
+            
+            altVariants.push(full);
+          }
+          
+          const altXMatch = titleLower.match(/\bx(\d+)\b/i);
+          if (altXMatch) altVariants.push(altXMatch[0].toLowerCase());
+          
+          // Letter sizes (S, M, L, XL, etc.)
+          const altLetterSizeMatches = titleLower.matchAll(/\b(size\s+)?(x{0,2}s|x{0,3}l|m)\b/gi);
+          for (const match of altLetterSizeMatches) {
+            const size = match[0].toLowerCase().replace(/size\s*/i, '').trim();
+            if (size) altVariants.push(`size:${size}`);
+          }
+          
+          // Numbered sizes (Size 10, UK 12, US 8, EU 40)
+          const altNumberedSizeMatches = titleLower.matchAll(/\b(size|uk|us|eu)\s*(\d+)\b/gi);
+          for (const match of altNumberedSizeMatches) {
+            altVariants.push(match[0].toLowerCase().replace(/\s+/g, ''));
+          }
+          
+          const altVariantSet = new Set(altVariants);
+          
+          // ALL our variants must appear in the alternative
+          const allVariantsMatch = variants.every(v => altVariantSet.has(v));
+          if (!allVariantsMatch) {
+            return false; // Missing variant = different product
+          }
+        }
+        
+        return true;
+      })
+      // Sort by CHEAPEST price first
+      .sort((a, b) => a.price - b.price)
+      // Take top 3
+      .slice(0, 3);
+    
+    console.log(`✅ Found ${alternatives.length} matching alternatives (filtered from ${allResults.length} results: ${shoppingResults.results?.length || 0} DDG + ${costcoResults.results?.length || 0} Costco)`);
+    
+    // Check if user has the best price (cheapest of all alternatives)
+    const cheapestAltPrice = alternatives.length > 0 ? alternatives[0].price : Infinity;
+    const hasBestPrice = currentPrice > 0 && currentPrice <= cheapestAltPrice;
+    
+    // Map alternatives with savings/extra cost info
+    const alternativesWithSavings = alternatives.map(alt => {
+      const isCheaper = currentPrice > 0 && alt.price < currentPrice;
+      const priceDiff = Math.abs(currentPrice - alt.price);
+      return {
+        title: alt.title,
+        price: alt.price,
+        storeName: alt.storeName,
+        productUrl: alt.productUrl,
+        imageUrl: alt.imageUrl,
+        savings: isCheaper ? priceDiff.toFixed(2) : null,
+        savingsPercent: isCheaper ? ((priceDiff / currentPrice) * 100).toFixed(0) : null,
+        extraCost: !isCheaper ? priceDiff.toFixed(2) : null,
+        extraCostPercent: !isCheaper && currentPrice > 0 ? ((priceDiff / currentPrice) * 100).toFixed(0) : null,
+        isCheaper
+      };
+    });
+    
+    for (const alt of alternativesWithSavings) {
+      if (alt.isCheaper) {
+        console.log(`   💰 £${alt.price} at ${alt.storeName} (Save £${alt.savings}! = ${alt.savingsPercent}% off)`);
+      } else {
+        console.log(`   📍 £${alt.price} at ${alt.storeName} (+£${alt.extraCost} more)`);
+      }
+    }
+    
+    if (hasBestPrice) {
+      console.log(`   🏆 You've got the best price at £${currentPrice}!`);
+    }
+    
+    res.json({
+      success: true,
+      alternatives: alternativesWithSavings,
+      currentPrice,
+      currentStore: item.store_name,
+      searchQuery: cleanName,
+      hasBestPrice,  // true if current price is cheapest
+      sources: {
+        duckduckgo: shoppingResults.results?.length || 0,
+        costco: costcoResults.results?.length || 0
+      }
+    });
+    
+  } catch (error) {
+    console.error('Error finding alternatives:', error);
+    res.status(500).json({ error: 'Failed to find alternatives' });
   }
 });
 

@@ -1,0 +1,377 @@
+/* Rewards Page */
+.rewards-page {
+  min-height: 100vh;
+  background: transparent;
+  padding: var(--space-lg);
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.rewards-loading,
+.rewards-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 50vh;
+  gap: var(--space-md);
+  font-family: var(--font-pixel);
+  color: var(--text-secondary);
+}
+
+/* Header */
+.rewards-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  margin-bottom: var(--space-xl);
+}
+
+.btn-back {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-xs) var(--space-sm);
+  background: var(--bg-card);
+  border: 2px solid var(--pixel-outline);
+  border-radius: var(--border-radius-sm);
+  font-family: var(--font-pixel);
+  font-size: var(--font-size-xs);
+  color: var(--text-primary);
+  text-decoration: none;
+  box-shadow: var(--shadow-pixel-sm);
+  transition: all 0.1s ease;
+}
+
+.btn-back:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-pixel);
+}
+
+.rewards-title {
+  font-family: var(--font-pixel);
+  font-size: var(--font-size-lg);
+  color: var(--text-primary);
+  margin: 0;
+}
+
+/* Total Coins Card */
+.total-coins-card {
+  display: flex;
+  align-items: center;
+  gap: var(--space-lg);
+  padding: var(--space-xl);
+  background: #ffb5c5;
+  border: 3px solid var(--pixel-outline);
+  border-radius: var(--border-radius-lg);
+  box-shadow: var(--shadow-pixel-lg);
+  margin-bottom: var(--space-lg);
+}
+
+.total-coins-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pixel-coin {
+  width: 72px;
+  height: 72px;
+  min-width: 72px;
+  min-height: 72px;
+  flex-shrink: 0;
+  aspect-ratio: 1 / 1;
+  background: linear-gradient(145deg, #ffd700 0%, #ffb800 50%, #ff9500 100%);
+  border: 4px solid var(--pixel-outline);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 
+    inset -4px -4px 0 rgba(0,0,0,0.2),
+    inset 4px 4px 0 rgba(255,255,255,0.3),
+    4px 4px 0 var(--pixel-outline);
+  animation: coin-shine 2s ease-in-out infinite;
+  position: relative;
+}
+
+.pixel-coin::before {
+  content: '';
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  width: 16px;
+  height: 16px;
+  background: rgba(255, 255, 255, 0.5);
+  border-radius: 50%;
+}
+
+.pixel-coin span {
+  font-family: var(--font-pixel);
+  font-size: 2rem;
+  color: var(--pixel-dark);
+  text-shadow: 1px 1px 0 rgba(255,255,255,0.5);
+  font-weight: bold;
+}
+
+@keyframes coin-shine {
+  0%, 100% { 
+    filter: brightness(1);
+  }
+  50% { 
+    filter: brightness(1.1);
+  }
+}
+
+.total-coins-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.total-coins-value {
+  font-family: var(--font-pixel);
+  font-size: 3rem;
+  color: var(--pixel-dark);
+  line-height: 1;
+  text-shadow: 2px 2px 0 rgba(255, 255, 255, 0.3);
+}
+
+.total-coins-label {
+  font-family: var(--font-pixel);
+  font-size: var(--font-size-sm);
+  color: var(--pixel-dark);
+  opacity: 0.8;
+}
+
+.total-coins-card .pixel-mascot {
+  width: 100px;
+  height: 100px;
+}
+
+.total-coins-card .pixel-mascot img {
+  width: 100px;
+  height: 100px;
+}
+
+/* Streak Card */
+.streak-card {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-lg);
+  background: var(--bg-card);
+  border: 2px solid var(--pixel-outline);
+  border-radius: var(--border-radius-md);
+  box-shadow: var(--shadow-pixel);
+  margin-bottom: var(--space-xl);
+}
+
+.streak-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  background: var(--pixel-yellow);
+  border: 2px solid var(--pixel-outline);
+  border-radius: var(--border-radius-sm);
+  color: var(--pixel-dark);
+  animation: flame-pulse 1s ease-in-out infinite;
+}
+
+@keyframes flame-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+
+.streak-info {
+  flex: 1;
+}
+
+.streak-current {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-xs);
+}
+
+.streak-number {
+  font-family: var(--font-pixel);
+  font-size: var(--font-size-2xl);
+  color: var(--pixel-orange);
+}
+
+.streak-label {
+  font-family: var(--font-pixel);
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+}
+
+.streak-best {
+  font-family: var(--font-pixel);
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  margin-top: var(--space-xs);
+}
+
+/* Breakdown Section */
+.breakdown-section {
+  margin-bottom: var(--space-xl);
+}
+
+.breakdown-title {
+  font-family: var(--font-pixel);
+  font-size: var(--font-size-md);
+  color: var(--text-primary);
+  margin-bottom: var(--space-md);
+}
+
+.breakdown-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.breakdown-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-md);
+  background: var(--bg-card);
+  border: 2px solid var(--pixel-outline);
+  border-radius: var(--border-radius-md);
+  box-shadow: var(--shadow-pixel-sm);
+  transition: all 0.1s ease;
+}
+
+.breakdown-item:hover {
+  transform: translateX(4px);
+}
+
+.breakdown-item.locked {
+  opacity: 0.6;
+}
+
+.breakdown-item.locked:hover {
+  transform: none;
+}
+
+.breakdown-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: 2px solid var(--pixel-outline);
+  border-radius: var(--border-radius-sm);
+  color: var(--pixel-white);
+  flex-shrink: 0;
+}
+
+.breakdown-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.breakdown-label {
+  font-family: var(--font-pixel);
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+}
+
+.breakdown-description {
+  font-family: var(--font-pixel);
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.breakdown-earned {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-family: var(--font-pixel);
+  font-size: var(--font-size-sm);
+  color: var(--pixel-teal);
+  font-weight: bold;
+  flex-shrink: 0;
+}
+
+.breakdown-earned .earned-check {
+  color: var(--accent-success);
+}
+
+.breakdown-earned .not-earned {
+  color: var(--text-muted);
+}
+
+/* Tips Section */
+.tips-section {
+  padding: var(--space-lg);
+  background: var(--bg-secondary);
+  border: 2px dashed var(--pixel-outline);
+  border-radius: var(--border-radius-md);
+}
+
+.tips-title {
+  font-family: var(--font-pixel);
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+  margin-bottom: var(--space-md);
+}
+
+.tips-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.tips-list li {
+  font-family: var(--font-pixel);
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  padding-left: var(--space-md);
+  position: relative;
+}
+
+.tips-list li::before {
+  content: '→';
+  position: absolute;
+  left: 0;
+  color: var(--pixel-teal);
+}
+
+/* Responsive */
+@media (max-width: 480px) {
+  .rewards-page {
+    padding: var(--space-md);
+  }
+
+  .total-coins-card {
+    flex-wrap: wrap;
+    padding: var(--space-lg);
+  }
+
+  .total-coins-value {
+    font-size: 2.5rem;
+  }
+
+  .total-coins-icon {
+    width: 60px;
+    height: 60px;
+  }
+
+  .breakdown-description {
+    display: none;
+  }
+}
+

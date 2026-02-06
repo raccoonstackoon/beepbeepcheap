@@ -236,7 +236,7 @@ input::placeholder, textarea::placeholder {
 }
 
 .price-down {
-  color: var(--pixel-mint);
+  color: #4ECDC4;
 }
 
 .price-up {

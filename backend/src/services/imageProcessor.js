@@ -86,38 +86,67 @@ Return as JSON:
   "description": "any other relevant text on the tag"
 }`;
     } else {
-      prompt = `${focusInstruction}You are analyzing a photo of a product. Your PRIMARY goal is to identify the BRAND.
+      prompt = `${focusInstruction}You are analyzing a photo of a product. You must ACCURATELY identify both the product type AND the brand.
 
-STEP 1: BRAND DETECTION (CRITICAL)
+STEP 1: PRODUCT TYPE IDENTIFICATION (CRITICAL - GET THIS RIGHT)
+Before anything else, carefully determine WHAT the product actually is.
+
+For CLOTHING items, pay close attention to:
+- Is it a TOP (worn on upper body) or BOTTOM (worn on lower body)?
+- Look for: necklines, armholes, sleeves, waistbands, leg openings, hems
+- A cardigan/sweater has: neckline, armholes or sleeves, hangs from shoulders
+- Trousers/pants have: waistband, two separate leg tubes, worn from waist down
+- Consider the garment CONSTRUCTION - how would someone put it on?
+- Look at where the garment sits on the model's body
+
+For OTHER products:
+- What is its primary function?
+- What category does it belong to?
+
+STEP 2: BRAND DETECTION
 Look carefully for ANY of these:
 - Brand logos (text or symbol)
 - Brand name printed/embroidered on the product
 - Labels, tags, or packaging with brand name
 - Distinctive brand patterns or design elements (e.g., Nike swoosh, Apple logo, IKEA style)
 
-STEP 2: PRODUCT IDENTIFICATION
-Identify what the product is and describe it for search purposes.
+STEP 3: VERIFICATION
+Double-check your identification:
+- Does your product name make sense given what you see?
+- For clothing: confirm it matches where it's worn on the body
+- Would your description help someone find this exact item?
 
 Return as JSON:
 {
   "brand": "the brand name if detected (use official brand name, e.g., 'IKEA' not 'ikea'). Return null if no brand is visible",
   "brandConfidence": "high/medium/low/none - how confident are you about the brand?",
   "brandSource": "where did you see the brand? (e.g., 'logo on product', 'label', 'tag', 'packaging', 'design style', 'not visible')",
-  "itemName": "descriptive name of the product (e.g., 'Grey Velvet Cushion with Bear Face')",
-  "category": "product category (e.g., 'home decor', 'clothing', 'electronics')",
-  "description": "detailed visual description for finding similar items",
+  "itemName": "accurate, descriptive name of the product (e.g., 'Cream Knit Longline Cardigan', 'Navy Tapered Trousers')",
+  "category": "product category (e.g., 'clothing - tops', 'clothing - bottoms', 'home decor', 'electronics')",
+  "description": "detailed visual description including color, material, style, and key features",
   "searchTerms": ["array", "of", "specific", "search", "terms"],
-  "visualFeatures": ["key", "visual", "features", "for", "matching"]
+  "visualFeatures": ["key", "visual", "features", "for", "matching"],
+  "variants": {
+    "color": "the color if visible (e.g., 'Sage Green', 'White & Rose Gold', 'Navy'). Return null if not applicable",
+    "size": "the size/amount if visible (e.g., '225ml', '450G', '500ml', 'Large', '32inch'). Return null if not visible",
+    "quantity": "pack quantity if visible (e.g., '2 pack', 'x3', 'set of 4'). Return null if single item or not visible",
+    "model": "model number/code if visible (e.g., 'DT9814G0', 'A2442'). Return null if not visible"
+  }
 }
 
-Be VERY thorough in looking for brand indicators. Even subtle logos or text matter.
+IMPORTANT: Accuracy of product identification is crucial. Take your time to correctly identify what the item actually is.
 Only return the JSON object, no other text.`;
     }
+    
+    // Use different system prompts based on the type of image analysis
+    const systemPrompt = type === 'pricetag' 
+      ? "You are a helpful assistant that can accurately read and interpret images, especially price tags and barcodes. When shown a price tag: 1) FIRST look for any barcode and carefully read the numbers printed below it - this is critical for product identification. 2) Read the exact price. 3) Identify store name from logos or branding. 4) Extract product name and brand. Be extremely precise with numbers, especially barcode digits."
+      : "You are an expert product identifier with exceptional visual analysis skills. You excel at accurately identifying products from photos, especially clothing and fashion items. For clothing, you carefully analyze garment construction, where it's worn on the body, necklines, sleeves, waistbands, and overall silhouette to correctly distinguish between different garment types (e.g., cardigans vs trousers, dresses vs jumpsuits). You never rush to conclusions and always verify your identification makes sense.";
     
     const response = await getAnthropic().messages.create({
       model: 'claude-opus-4-20250514',
       max_tokens: 1024,
-      system: "You are a helpful assistant that can accurately read and interpret images, especially price tags and barcodes. When shown a price tag: 1) FIRST look for any barcode and carefully read the numbers printed below it - this is critical for product identification. 2) Read the exact price. 3) Identify store name from logos or branding. 4) Extract product name and brand. Be extremely precise with numbers, especially barcode digits.",
+      system: systemPrompt,
       messages: [
         {
           role: 'user',
