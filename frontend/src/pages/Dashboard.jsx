@@ -11,8 +11,7 @@ import {
   X,
   Check,
   ExternalLink,
-  Sparkles,
-  Coins
+  Sparkles
 } from 'lucide-react';
 import ItemCard from '../components/ItemCard';
 import AddItemModal from '../components/AddItemModal';
@@ -261,7 +260,7 @@ export default function Dashboard({ items, alerts, onRefresh, apiBase }) {
             {/* Coins Display - Links to Rewards Page */}
             {rewards && (
               <Link to="/rewards" className="reward-stat reward-coins" aria-label="View rewards">
-                <Coins size={14} className="coin-icon" />
+                <img src={raccoonImage} alt="coins" className="coin-icon" />
                 <span className="reward-value">{rewards.coins}</span>
               </Link>
             )}

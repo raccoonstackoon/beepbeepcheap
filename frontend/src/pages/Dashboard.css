@@ -115,9 +115,9 @@
 }
 
 .reward-coins .coin-icon {
-  width: 14px;
-  height: 14px;
-  color: var(--pixel-orange);
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
 }
 
 .reward-value {
