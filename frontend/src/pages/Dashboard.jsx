@@ -265,7 +265,6 @@ export default function Dashboard({ items, alerts, onRefresh, apiBase }) {
               </Link>
             )}
             
-            <div className="nav-divider"></div>
             <button 
               className="btn-modern btn-modern-icon"
               onClick={() => setShowAlerts(!showAlerts)}
