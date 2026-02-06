@@ -91,11 +91,15 @@
 .reward-stat.reward-coins {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 4px;
   background: var(--pixel-green);
   border: 1px solid var(--pixel-outline);
   border-radius: var(--border-radius-sm);
-  padding: 2px 8px;
+  padding: 0 8px;
+  height: 24px;
+  min-height: 24px;
+  max-height: 24px;
   box-shadow: var(--shadow-pixel-sm);
   white-space: nowrap;
   cursor: pointer;
@@ -106,7 +110,7 @@
 .reward-stat.reward-coins:hover {
   transform: translateY(-1px);
   box-shadow: var(--shadow-pixel-sm), 0 2px 0 var(--pixel-outline);
-  background: #7dcea0;
+  background: var(--pixel-teal);
 }
 
 .reward-stat.reward-coins:active {
@@ -117,13 +121,47 @@
 .reward-coins .coin-icon {
   width: 16px;
   height: 16px;
-  object-fit: contain;
+  min-width: 16px;
+  min-height: 16px;
+  flex-shrink: 0;
+  aspect-ratio: 1 / 1;
+  background: linear-gradient(145deg, #ffd700 0%, #ffb800 50%, #ff9500 100%);
+  border: 2px solid var(--pixel-outline);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  box-shadow: 
+    inset -2px -2px 0 rgba(0,0,0,0.2),
+    inset 2px 2px 0 rgba(255,255,255,0.3),
+    0 1px 2px rgba(0,0,0,0.1);
+}
+
+.reward-coins .coin-icon::before {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 4px;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.5);
+  border-radius: 50%;
+}
+
+.reward-coins .coin-icon span {
+  font-family: var(--font-pixel);
+  font-size: 10px;
+  color: var(--pixel-dark);
+  text-shadow: 0.5px 0.5px 0 rgba(255,255,255,0.5);
+  font-weight: bold;
+  line-height: 1;
 }
 
 .reward-value {
   font-family: var(--font-pixel);
   font-size: 10px;
-  color: var(--pixel-dark);
+  color: var(--pixel-white);
   font-weight: bold;
 }
 

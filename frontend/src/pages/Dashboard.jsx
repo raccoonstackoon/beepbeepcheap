@@ -260,7 +260,9 @@ export default function Dashboard({ items, alerts, onRefresh, apiBase }) {
             {/* Coins Display - Links to Rewards Page */}
             {rewards && (
               <Link to="/rewards" className="reward-stat reward-coins" aria-label="View rewards">
-                <img src={raccoonImage} alt="coins" className="coin-icon" />
+                <div className="coin-icon">
+                  <span>$</span>
+                </div>
                 <span className="reward-value">{rewards.coins}</span>
               </Link>
             )}
