@@ -253,8 +253,8 @@
 
 .nav-conveyor-belt {
   position: absolute;
-  left: 60px;
-  right: 280px; /* More space for rewards + buttons */
+  left: 0;
+  right: 0;
   top: 0;
   bottom: 0;
   display: flex;
@@ -263,6 +263,21 @@
   white-space: nowrap;
   pointer-events: none;
   z-index: 1;
+  /* Fade edges so text doesn't abruptly cut off */
+  mask-image: linear-gradient(
+    to right,
+    transparent 0px,
+    black 50px,
+    black calc(100% - 220px),
+    transparent 100%
+  );
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent 0px,
+    black 50px,
+    black calc(100% - 220px),
+    transparent 100%
+  );
 }
 
 .nav-conveyor-text {
@@ -316,6 +331,8 @@
   gap: var(--space-sm);
   font-family: var(--font-pixel);
   font-size: var(--font-size-xs);
+  position: relative;
+  z-index: 2;
   color: var(--pixel-teal);
   -webkit-text-stroke: 0.5px var(--pixel-black);
   text-shadow: none;
