@@ -92,8 +92,8 @@
   display: flex;
   align-items: center;
   gap: 4px;
-  background: var(--pixel-yellow);
-  border: 2px solid var(--pixel-outline);
+  background: var(--pixel-green);
+  border: 1px solid var(--pixel-outline);
   border-radius: var(--border-radius-sm);
   padding: 2px 8px;
   box-shadow: var(--shadow-pixel-sm);
@@ -106,7 +106,7 @@
 .reward-stat.reward-coins:hover {
   transform: translateY(-1px);
   box-shadow: var(--shadow-pixel-sm), 0 2px 0 var(--pixel-outline);
-  background: #ffe066;
+  background: #7dcea0;
 }
 
 .reward-stat.reward-coins:active {
