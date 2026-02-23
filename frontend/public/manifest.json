@@ -1,1 +1,24 @@
-
+{
+  "name": "beepbeep.cheap",
+  "short_name": "beepbeep",
+  "description": "Track prices and never miss a deal. Honk if you love savings!",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#E8F4F8",
+  "theme_color": "#4ECDC4",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
