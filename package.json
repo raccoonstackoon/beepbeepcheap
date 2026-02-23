@@ -9,15 +9,17 @@
     "dev": "concurrently \"cd backend && npm run dev\" \"cd frontend && npm run dev\"",
     "postinstall": "npm run install:all"
   },
-  "keywords": ["price-tracker", "deals", "shopping"],
+  "keywords": [
+    "price-tracker",
+    "deals",
+    "shopping"
+  ],
   "author": "",
   "license": "MIT",
   "engines": {
     "node": ">=18.0.0"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
   }
 }
-
-
-
-
-

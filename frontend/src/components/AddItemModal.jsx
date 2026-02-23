@@ -1,26 +1,27 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { 
   X, 
-  Link as LinkIcon, 
   Camera, 
   Loader,
   ArrowRight,
   ExternalLink,
-  Check
+  Check,
+  Search
 } from 'lucide-react';
 import './AddItemModal.css';
 import ImageAnnotator from './ImageAnnotator';
 
-export default function AddItemModal({ onClose, onSuccess, apiBase }) {
-  const [mode, setMode] = useState(null); // 'url' or 'product'
+export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode }) {
+  const mappedMode = initialMode === 'search' ? 'url' : initialMode;
+  const [mode, setMode] = useState(mappedMode || null);
   
   // Ref to file input so we can trigger it programmatically
   const fileInputRef = useRef(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   
-  // URL mode state
-  const [url, setUrl] = useState('');
+  // Unified input state (handles both URLs and search queries)
+  const [inputValue, setInputValue] = useState('');
   
   // Image mode state
   const [imageFile, setImageFile] = useState(null);
@@ -42,6 +43,7 @@ export default function AddItemModal({ onClose, onSuccess, apiBase }) {
   // Shopping options state - top 3 cheapest results
   const [shoppingOptions, setShoppingOptions] = useState([]);
   const [selectedOption, setSelectedOption] = useState(null);
+  const [backupResults, setBackupResults] = useState([]);
   
   // Manual entry state (after extraction or direct)
   const [manualData, setManualData] = useState({
@@ -52,8 +54,30 @@ export default function AddItemModal({ onClose, onSuccess, apiBase }) {
     storeName: ''
   });
 
+  // When opened directly in photo mode, trigger file picker immediately
+  useEffect(() => {
+    if (initialMode === 'product' && fileInputRef.current) {
+      fileInputRef.current.click();
+    }
+  }, [initialMode]);
+
+  const isUrl = (str) => {
+    const trimmed = str.trim();
+    return /^https?:\/\//i.test(trimmed) || /^www\./i.test(trimmed) || /\.[a-z]{2,}\/\S/i.test(trimmed);
+  };
+
+  const handleUnifiedSubmit = async () => {
+    if (!inputValue.trim()) return;
+
+    if (isUrl(inputValue)) {
+      await handleUrlSubmit();
+    } else {
+      await handleSearchSubmit();
+    }
+  };
+
   const handleUrlSubmit = async () => {
-    if (!url.trim()) return;
+    if (!inputValue.trim()) return;
     
     setLoading(true);
     setError(null);
@@ -62,7 +86,7 @@ export default function AddItemModal({ onClose, onSuccess, apiBase }) {
       const res = await fetch(`${apiBase}/items/url`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: url.trim() })
+        body: JSON.stringify({ url: inputValue.trim() })
       });
       
       const data = await res.json();
@@ -72,6 +96,48 @@ export default function AddItemModal({ onClose, onSuccess, apiBase }) {
       }
       
       onSuccess();
+    } catch (err) {
+      setError(err.message);
+    }
+    
+    setLoading(false);
+  };
+
+  const handleSearchSubmit = async () => {
+    if (!inputValue.trim()) return;
+    
+    setLoading(true);
+    setError(null);
+    setShoppingOptions([]);
+    setSelectedOption(null);
+    setExtractedData(null);
+    setSearchResults(null);
+    
+    try {
+      const res = await fetch(`${apiBase}/items/search`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: inputValue.trim() })
+      });
+      
+      const data = await res.json();
+      
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to search');
+      }
+      
+      setExtractedData({ itemName: inputValue.trim() });
+      
+      if (data.shoppingOptions && data.shoppingOptions.length > 0) {
+        setShoppingOptions(data.shoppingOptions);
+        setBackupResults(data.backupResults || []);
+      } else {
+        setSearchResults({
+          found: false,
+          searchUrl: `https://www.google.com/search?q=${encodeURIComponent(inputValue.trim())}&tbm=shop`,
+          error: 'No shopping results found'
+        });
+      }
     } catch (err) {
       setError(err.message);
     }
@@ -249,6 +315,22 @@ export default function AddItemModal({ onClose, onSuccess, apiBase }) {
     setLoading(false);
   };
   
+  const handleDismissOption = (index) => {
+    setShoppingOptions(prev => {
+      const updated = [...prev];
+      updated.splice(index, 1);
+      
+      // Pull in a backup result if available
+      if (backupResults.length > 0) {
+        const [next, ...rest] = backupResults;
+        updated.push(next);
+        setBackupResults(rest);
+      }
+      
+      return updated;
+    });
+  };
+  
   // Handle user selecting a shopping option
   const handleSelectOption = (option) => {
     setSelectedOption(option);
@@ -286,6 +368,57 @@ export default function AddItemModal({ onClose, onSuccess, apiBase }) {
     }
     
     await handleManualSave();
+  };
+  
+  const handleTrackAll = async () => {
+    if (shoppingOptions.length === 0) return;
+    
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const fixUrl = (url) => {
+        if (url && url.startsWith('//')) return 'https:' + url;
+        return url || '';
+      };
+      
+      // Use the cheapest option as the main item
+      const main = shoppingOptions[0];
+      const mainImageUrl = fixUrl(main.imageUrl || identifiedProduct?.localImageUrl || '');
+      
+      // Build tracked_sources from ALL options (including main, for a complete picture)
+      const trackedSources = shoppingOptions.map(opt => ({
+        title: (opt.title || '').trim(),
+        url: opt.productUrl || null,
+        imageUrl: fixUrl(opt.imageUrl || ''),
+        price: opt.price || null,
+        storeName: opt.storeName || null
+      }));
+      
+      const res = await fetch(`${apiBase}/items/manual`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: (main.title || inputValue || '').trim(),
+          url: main.productUrl || null,
+          image_url: mainImageUrl || null,
+          current_price: main.price || null,
+          store_name: main.storeName || null,
+          tracked_sources: trackedSources
+        })
+      });
+      
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Failed to save item');
+      }
+      
+      onSuccess();
+    } catch (err) {
+      setError(err.message);
+    }
+    
+    setLoading(false);
   };
   
   // Handle confirmation/submission
@@ -380,10 +513,10 @@ export default function AddItemModal({ onClose, onSuccess, apiBase }) {
           <div className="mode-selection">
             <button className="mode-card" onClick={() => setMode('url')}>
               <div className="mode-icon url-icon">
-                <LinkIcon size={28} />
+                <Search size={28} />
               </div>
-              <h3>Paste URL</h3>
-              <p>Enter a product URL from any online store</p>
+              <h3>Search or Paste URL</h3>
+              <p>Type a product name or paste a URL from any store</p>
             </button>
             
             <button className="mode-card" onClick={handlePhotoModeClick}>
@@ -396,23 +529,30 @@ export default function AddItemModal({ onClose, onSuccess, apiBase }) {
           </div>
         )}
         
-        {/* URL Mode */}
-        {mode === 'url' && (
+        {/* Unified URL / Search Mode */}
+        {mode === 'url' && !extractedData && !loading && (
           <div className="url-mode">
             <p className="mode-description">
-              Paste a product URL from any online store. We'll automatically extract the price and details.
+              Paste a product URL or type a name to search for the best prices.
             </p>
             
             <div className="input-group">
               <input
-                type="url"
-                placeholder="https://www.amazon.com/product/..."
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleUrlSubmit()}
+                type="text"
+                placeholder="Paste URL or search e.g. dyson v15, nike air max..."
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleUnifiedSubmit()}
                 disabled={loading}
+                autoFocus
               />
             </div>
+            
+            {inputValue.trim() && (
+              <p className="input-hint">
+                {isUrl(inputValue) ? '🔗 Looks like a URL — we\'ll fetch the product details' : '🔍 We\'ll search for the best prices online'}
+              </p>
+            )}
             
             {error && <p className="error-message">{error}</p>}
             
@@ -422,21 +562,34 @@ export default function AddItemModal({ onClose, onSuccess, apiBase }) {
               </button>
               <button 
                 className="btn btn-primary"
-                onClick={handleUrlSubmit}
-                disabled={!url.trim() || loading}
+                onClick={handleUnifiedSubmit}
+                disabled={!inputValue.trim() || loading}
               >
                 {loading ? (
                   <>
                     <Loader size={18} className="spinning" />
-                    Fetching...
+                    {isUrl(inputValue) ? 'Fetching...' : 'Searching...'}
                   </>
                 ) : (
                   <>
-                    Add Item
+                    {isUrl(inputValue) ? 'Add Item' : 'Search'}
                     <ArrowRight size={18} />
                   </>
                 )}
               </button>
+            </div>
+          </div>
+        )}
+        
+        {/* Unified Search/URL - Loading */}
+        {mode === 'url' && loading && !extractedData && (
+          <div className="image-mode processing">
+            <div className="processing-indicator">
+              <Loader size={32} className="spinning" />
+              <p>{isUrl(inputValue) ? 'Fetching product...' : 'Searching for deals...'}</p>
+              <span className="processing-hint">
+                {isUrl(inputValue) ? 'Extracting price and details' : 'Finding the best prices online'}
+              </span>
             </div>
           </div>
         )}
@@ -618,10 +771,12 @@ export default function AddItemModal({ onClose, onSuccess, apiBase }) {
             
             <div className="shopping-options-list">
               {shoppingOptions.map((option, index) => (
-                <button 
-                  key={index}
+                <div 
+                  key={index} 
                   className="shopping-option-card"
                   onClick={() => handleSelectOption(option)}
+                  role="button"
+                  tabIndex={0}
                 >
                   <div className="option-rank">#{index + 1}</div>
                   {option.imageUrl && (
@@ -636,8 +791,17 @@ export default function AddItemModal({ onClose, onSuccess, apiBase }) {
                       )}
                     </div>
                   </div>
-                  <ExternalLink size={16} className="option-arrow" />
-                </button>
+                  <div className="option-actions">
+                    <ExternalLink size={16} className="option-arrow" />
+                    <button 
+                      className="option-dismiss"
+                      onClick={(e) => { e.stopPropagation(); handleDismissOption(index); }}
+                      title="Remove this result"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                </div>
               ))}
             </div>
             
@@ -671,11 +835,32 @@ export default function AddItemModal({ onClose, onSuccess, apiBase }) {
                 onClick={() => {
                   setExtractedData(null);
                   setShoppingOptions([]);
-                  setNeedsShopName(true);
+                  if (mode === 'product') {
+                    setNeedsShopName(true);
+                  }
                 }}
               >
                 Back
               </button>
+              {shoppingOptions.length > 1 && (
+                <button 
+                  className="btn btn-primary"
+                  onClick={handleTrackAll}
+                  disabled={loading}
+                >
+                  {loading ? (
+                    <>
+                      <Loader size={18} className="spinning" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      Track All {shoppingOptions.length}
+                      <Check size={18} />
+                    </>
+                  )}
+                </button>
+              )}
             </div>
           </div>
         )}

@@ -395,6 +395,16 @@
   text-shadow: none;
 }
 
+.tracked-count {
+  font-family: var(--font-pixel);
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--border-radius-sm);
+  border: var(--border-width) solid var(--pixel-outline);
+}
+
 .btn-search-alternatives {
   display: flex;
   align-items: center;
@@ -712,6 +722,49 @@
 
 .btn-add-watchlist .spinning {
   animation: spin 1s linear infinite;
+}
+
+/* Save All button */
+.btn-save-all {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-sm);
+  width: 100%;
+  padding: var(--space-sm) var(--space-md);
+  background: linear-gradient(135deg, #4ECDC4 0%, #3BB5AD 100%);
+  color: white;
+  border: 2px solid var(--pixel-outline);
+  border-radius: var(--border-radius-sm);
+  font-family: var(--font-pixel);
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-shadow: var(--shadow-pixel-sm);
+  margin-top: var(--space-sm);
+}
+
+.btn-save-all:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-pixel);
+  background: linear-gradient(135deg, #3BB5AD 0%, #4ECDC4 100%);
+}
+
+.btn-save-all:active:not(:disabled) {
+  transform: translateY(1px);
+  box-shadow: 1px 1px 0 var(--pixel-outline);
+}
+
+.btn-save-all:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.btn-save-all--done {
+  background: #A7F3D0;
+  color: var(--pixel-dark);
+  border-color: var(--pixel-outline);
 }
 
 /* No alternatives state */

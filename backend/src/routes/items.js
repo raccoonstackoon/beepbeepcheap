@@ -11,9 +11,10 @@ const router = express.Router();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Configure multer for image uploads
+// Configure multer for image uploads (configurable for persistent disk on hosted platforms)
+const uploadsDir = process.env.UPLOADS_PATH || path.join(__dirname, '../../uploads');
 const storage = multer.diskStorage({
-  destination: path.join(__dirname, '../../uploads'),
+  destination: uploadsDir,
   filename: (req, file, cb) => {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
     cb(null, uniqueSuffix + path.extname(file.originalname));
@@ -261,16 +262,51 @@ router.post('/image', upload.single('image'), async (req, res) => {
   }
 });
 
+// POST /api/items/search - Search for a product by text query
+router.post('/search', async (req, res) => {
+  try {
+    const { query } = req.body;
+
+    if (!query || !query.trim()) {
+      return res.status(400).json({ error: 'Search query is required' });
+    }
+
+    const searchQuery = query.trim();
+    console.log(`🔎 Text search for: "${searchQuery}"`);
+
+    const shoppingResults = await searchDuckDuckGoShopping(searchQuery);
+    const allResults = shoppingResults.results || [];
+    const topResults = allResults.slice(0, 3);
+    const backupResults = allResults.slice(3, 10);
+
+    for (const r of topResults) {
+      console.log(`   💰 £${r.price || 'N/A'} - ${r.title?.substring(0, 50)}... (${r.storeName})`);
+    }
+
+    res.json({
+      shoppingOptions: topResults,
+      backupResults,
+      searchQuery,
+      totalResultsFound: allResults.length,
+      searchMethod: 'duckduckgo_shopping'
+    });
+  } catch (error) {
+    console.error('Error searching products:', error);
+    res.status(500).json({ error: 'Failed to search for products' });
+  }
+});
+
 // POST /api/items/manual - Add item manually (after image processing or manual entry)
 router.post('/manual', (req, res) => {
   try {
-    const { name, url, image_url, current_price, store_name } = req.body;
+    const { name, url, image_url, current_price, store_name, tracked_sources } = req.body;
     
     console.log(`📥 Manual item request received:`);
     console.log(`   - Name: ${name}`);
     console.log(`   - URL: ${url || 'none'}`);
     console.log(`   - Image URL received: ${image_url || 'NONE'}`);
     console.log(`   - Store: ${store_name || 'none'}`);
+    if (tracked_sources) console.log(`   - Tracked sources: ${tracked_sources.length} stores`);
     
     if (!name) {
       return res.status(400).json({ error: 'Item name is required' });
@@ -306,7 +342,8 @@ router.post('/manual', (req, res) => {
       image_url: finalImageUrl,
       store_name: store_name || null,
       current_price: current_price ? parseFloat(current_price) : null,
-      original_price: current_price ? parseFloat(current_price) : null
+      original_price: current_price ? parseFloat(current_price) : null,
+      tracked_sources: tracked_sources || null
     });
     
     console.log(`📌 Added item manually: "${name}" at ${store_name || 'Unknown'} for £${current_price || 'N/A'}`);

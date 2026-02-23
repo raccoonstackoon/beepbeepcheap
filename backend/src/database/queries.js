@@ -19,17 +19,17 @@ export function getItemById(id) {
   return db.prepare('SELECT * FROM items WHERE id = ?').get(id);
 }
 
-export function createItem({ name, url, image_url, store_name, current_price, original_price }) {
+export function createItem({ name, url, image_url, store_name, current_price, original_price, tracked_sources }) {
   const db = getDatabase();
   const lowest_price = current_price;
   const last_checked = new Date().toISOString();
+  const sourcesJson = tracked_sources ? JSON.stringify(tracked_sources) : null;
   
   const result = db.prepare(`
-    INSERT INTO items (name, url, image_url, store_name, current_price, original_price, lowest_price, last_checked)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(name, url, image_url, store_name || null, current_price, original_price, lowest_price, last_checked);
+    INSERT INTO items (name, url, image_url, store_name, current_price, original_price, lowest_price, last_checked, tracked_sources)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(name, url, image_url, store_name || null, current_price, original_price, lowest_price, last_checked, sourcesJson);
   
-  // Also add to price history
   if (current_price) {
     addPriceHistory(result.lastInsertRowid, current_price);
   }

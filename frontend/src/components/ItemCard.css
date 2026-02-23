@@ -98,8 +98,10 @@
 }
 
 .price-change-badge.increased {
-  background: var(--accent-danger);
-  color: var(--pixel-white);
+  background: var(--bg-secondary, #888);
+  color: var(--text-secondary, #ccc);
+  border-color: #999;
+  box-shadow: 2px 2px 0px #777;
 }
 
 /* Content */

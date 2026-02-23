@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { createServer } from 'http';
 import { WebSocketServer } from 'ws';
@@ -78,8 +79,12 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// Serve uploaded images
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+// Serve uploaded images (configurable for persistent disk on hosted platforms)
+const uploadsPath = process.env.UPLOADS_PATH || path.join(__dirname, '../uploads');
+if (!fs.existsSync(uploadsPath)) {
+  fs.mkdirSync(uploadsPath, { recursive: true });
+}
+app.use('/uploads', express.static(uploadsPath));
 
 // Initialize database
 initDatabase();
@@ -97,56 +102,54 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// Test endpoint to simulate a price drop notification (for testing only)
-app.post('/api/test-notification', (req, res) => {
-  const testAlert = {
-    id: Date.now(),
-    item_id: 1,
-    item_name: 'Test Product',
-    image_url: null,
-    old_price: 29.99,
-    new_price: 19.99,
-    created_at: new Date().toISOString()
-  };
-  
-  broadcastPriceDropAlert(testAlert);
-  res.json({ success: true, message: 'Test notification sent!' });
-});
+// Test endpoints — only available in development
+if (process.env.NODE_ENV !== 'production') {
+  app.post('/api/test-notification', (req, res) => {
+    const testAlert = {
+      id: Date.now(),
+      item_id: 1,
+      item_name: 'Test Product',
+      image_url: null,
+      old_price: 29.99,
+      new_price: 19.99,
+      created_at: new Date().toISOString()
+    };
+    
+    broadcastPriceDropAlert(testAlert);
+    res.json({ success: true, message: 'Test notification sent!' });
+  });
 
-// Test endpoint to simulate a REAL price drop on an actual item (for testing only)
-app.post('/api/test-real-drop', async (req, res) => {
-  const queries = await import('./database/queries.js');
-  try {
-    // Get the first item with a price
-    const items = queries.getAllItems();
-    const item = items.find(i => i.current_price > 0);
-    
-    if (!item) {
-      return res.status(404).json({ error: 'No items with prices found' });
+  app.post('/api/test-real-drop', async (req, res) => {
+    const queries = await import('./database/queries.js');
+    try {
+      const items = queries.getAllItems();
+      const item = items.find(i => i.current_price > 0);
+      
+      if (!item) {
+        return res.status(404).json({ error: 'No items with prices found' });
+      }
+      
+      const oldPrice = item.current_price;
+      const newPrice = Math.round(oldPrice * 0.9 * 100) / 100;
+      
+      console.log(`🧪 Test: Simulating price drop for "${item.name}"`);
+      console.log(`   £${oldPrice} → £${newPrice}`);
+      
+      queries.updateItemPrice(item.id, newPrice);
+      
+      res.json({ 
+        success: true, 
+        message: `Price drop simulated for ${item.name}`,
+        oldPrice,
+        newPrice,
+        itemId: item.id
+      });
+    } catch (error) {
+      console.error('Test error:', error);
+      res.status(500).json({ error: error.message });
     }
-    
-    // Simulate a 10% price drop
-    const oldPrice = item.current_price;
-    const newPrice = Math.round(oldPrice * 0.9 * 100) / 100;
-    
-    console.log(`🧪 Test: Simulating price drop for "${item.name}"`);
-    console.log(`   £${oldPrice} → £${newPrice}`);
-    
-    // This will trigger the alert creation AND the WebSocket broadcast
-    queries.updateItemPrice(item.id, newPrice);
-    
-    res.json({ 
-      success: true, 
-      message: `Price drop simulated for ${item.name}`,
-      oldPrice,
-      newPrice,
-      itemId: item.id
-    });
-  } catch (error) {
-    console.error('Test error:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
+  });
+}
 
 // Manual trigger for price checks (used by external cron services)
 app.post('/api/cron/check-prices', async (req, res) => {
@@ -156,15 +159,15 @@ app.post('/api/cron/check-prices', async (req, res) => {
   res.json({ status: 'started', timestamp: new Date().toISOString() });
 });
 
-// Serve frontend in production
+// Serve frontend in production (only if the built frontend exists)
 if (process.env.NODE_ENV === 'production') {
   const frontendPath = path.join(__dirname, '../../frontend/dist');
-  app.use(express.static(frontendPath));
-  
-  // Handle client-side routing
-  app.get('*', (req, res) => {
-    res.sendFile(path.join(frontendPath, 'index.html'));
-  });
+  if (fs.existsSync(frontendPath)) {
+    app.use(express.static(frontendPath));
+    app.get('*', (req, res) => {
+      res.sendFile(path.join(frontendPath, 'index.html'));
+    });
+  }
 }
 
 // Start server - listen on 0.0.0.0 to allow connections from other devices on the network
@@ -177,7 +180,6 @@ server.listen(PORT, '0.0.0.0', () => {
   startScheduler();
 });
 
-// Updated Sun Jan 18 17:32:41 GMT 2026
 
 
 

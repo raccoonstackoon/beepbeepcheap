@@ -1,7 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { 
-  Plus, 
   Bell, 
   RefreshCw, 
   TrendingUp, 
@@ -11,7 +10,8 @@ import {
   X,
   Check,
   ExternalLink,
-  Sparkles
+  Sparkles,
+  Search
 } from 'lucide-react';
 import ItemCard from '../components/ItemCard';
 import AddItemModal from '../components/AddItemModal';
@@ -24,9 +24,19 @@ import './Dashboard.css';
 
 export default function Dashboard({ items, alerts, onRefresh, apiBase }) {
   const [showAddModal, setShowAddModal] = useState(false);
+  const [addItemMode, setAddItemMode] = useState(null);
   const [showAlerts, setShowAlerts] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [fallingMascots, setFallingMascots] = useState([]);
+  const [giantCaught, setGiantCaught] = useState(null);
+  
+  // Filter state for stat card filtering
+  const [activeFilter, setActiveFilter] = useState(null);
+  
+  // Internal search state
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const searchInputRef = useRef(null);
   
   // Rewards state
   const [rewards, setRewards] = useState(null);
@@ -41,6 +51,33 @@ export default function Dashboard({ items, alerts, onRefresh, apiBase }) {
     }
     return sum;
   }, 0);
+
+  // Filter items based on active stat filter and search query
+  const baseItems = activeFilter === 'drops'
+    ? items.filter(i => i.current_price && i.original_price && i.current_price < i.original_price)
+    : items;
+
+  const filteredItems = searchQuery.trim()
+    ? baseItems.filter(item => {
+        const q = searchQuery.toLowerCase();
+        return (
+          (item.name && item.name.toLowerCase().includes(q)) ||
+          (item.store_name && item.store_name.toLowerCase().includes(q)) ||
+          (item.url && item.url.toLowerCase().includes(q))
+        );
+      })
+    : baseItems;
+
+  const handleToggleSearch = () => {
+    setShowSearch(prev => {
+      if (!prev) {
+        setTimeout(() => searchInputRef.current?.focus(), 50);
+      } else {
+        setSearchQuery('');
+      }
+      return !prev;
+    });
+  };
 
   // Show reward toast notification (moved up so it can be used in effects)
   const showRewardToast = (message, coins) => {
@@ -194,14 +231,26 @@ export default function Dashboard({ items, alerts, onRefresh, apiBase }) {
   // Handle clicking a giant mascot
   const handleGiantClick = async (mascotId) => {
     try {
+      const caughtMascot = fallingMascots.find(m => m.id === mascotId);
       const res = await fetch(`${apiBase}/rewards/catch`, { method: 'POST' });
       const data = await res.json();
       
       setRewards(data.rewards);
-      showRewardToast('Giant mascot caught!', data.coinsEarned);
+      
+      // Show opaque "caught" overlay
+      setGiantCaught({
+        type: caughtMascot?.type || 'raccoon',
+        coins: data.coinsEarned
+      });
       
       // Remove the caught mascot immediately
       setFallingMascots(prev => prev.filter(m => m.id !== mascotId));
+      
+      // Dismiss overlay after animation
+      setTimeout(() => {
+        setGiantCaught(null);
+        showRewardToast('Giant mascot caught!', data.coinsEarned);
+      }, 2200);
     } catch (error) {
       console.error('Failed to catch mascot:', error);
     }
@@ -218,6 +267,22 @@ export default function Dashboard({ items, alerts, onRefresh, apiBase }) {
               <span className="reward-toast-message">{rewardToast.message}</span>
               <span className="reward-toast-coins">+{rewardToast.coins} coins!</span>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Giant Caught Overlay */}
+      {giantCaught && (
+        <div className="giant-caught-overlay" onClick={() => setGiantCaught(null)}>
+          <div className="giant-caught-content">
+            <div className="giant-caught-flash" />
+            <img
+              src={giantCaught.type === 'hyrax' ? hyraxImage : raccoonImage}
+              alt="Caught!"
+              className="giant-caught-mascot"
+            />
+            <div className="giant-caught-text">CAUGHT!</div>
+            <div className="giant-caught-coins">+{giantCaught.coins} coin</div>
           </div>
         </div>
       )}
@@ -268,7 +333,7 @@ export default function Dashboard({ items, alerts, onRefresh, apiBase }) {
             )}
             
             <button 
-              className="btn-modern btn-modern-icon"
+              className="btn-modern btn-modern-icon btn-modern-alert"
               onClick={() => setShowAlerts(!showAlerts)}
               aria-label="Alerts"
             >
@@ -284,13 +349,6 @@ export default function Dashboard({ items, alerts, onRefresh, apiBase }) {
             >
               <RefreshCw size={16} className={refreshing ? 'spinning' : ''} />
               <span>Refresh</span>
-            </button>
-            <button 
-              className="btn-modern btn-modern-primary"
-              onClick={() => setShowAddModal(true)}
-            >
-              <Plus size={16} />
-              <span>Add Item</span>
             </button>
           </div>
         </div>
@@ -326,19 +384,28 @@ export default function Dashboard({ items, alerts, onRefresh, apiBase }) {
       {/* Stats Cards - Glassmorphism */}
       <section className="stats-modern">
         <div className="stats-modern-grid">
-          <div className="stat-card-modern">
+          <div
+            className={`stat-card-modern stat-card-clickable ${activeFilter === null ? '' : 'stat-card-dimmed'}`}
+            onClick={() => setActiveFilter(null)}
+          >
             <div className="stat-card-content">
               <div className="stat-card-value">{totalItems}</div>
               <div className="stat-card-label">ITEMS</div>
             </div>
           </div>
-          <div className="stat-card-modern stat-card-modern-accent">
+          <div
+            className={`stat-card-modern stat-card-modern-accent stat-card-clickable ${activeFilter === 'drops' ? 'stat-card-active' : ''}`}
+            onClick={() => setActiveFilter(prev => prev === 'drops' ? null : 'drops')}
+          >
             <div className="stat-card-content">
               <div className="stat-card-value">{itemsWithDrops}</div>
               <div className="stat-card-label">DROPS</div>
             </div>
           </div>
-          <div className="stat-card-modern">
+          <div
+            className={`stat-card-modern stat-card-clickable ${activeFilter === null ? '' : 'stat-card-dimmed'}`}
+            onClick={() => setActiveFilter(null)}
+          >
             <div className="stat-card-content">
               <div className="stat-card-value">£{totalSavings.toFixed(2)}</div>
               <div className="stat-card-label">SAVINGS</div>
@@ -347,20 +414,33 @@ export default function Dashboard({ items, alerts, onRefresh, apiBase }) {
         </div>
       </section>
 
-      {/* Items Grid */}
-      <main className="main-modern">
-        {/* Only show CTA banner when there are items */}
-        {items.length > 0 && (
-          <div className="cta-banner">
-            <button 
-              className="btn-rainbow"
-              onClick={() => setShowAddModal(true)}
-            >
-              <Sparkles size={16} />
-              <span>Track a New Item</span>
+      {/* Internal Search Bar */}
+      {showSearch && (
+        <div className="internal-search-bar fade-in">
+          <div className="internal-search-container">
+            <Search size={16} className="internal-search-icon" />
+            <input
+              ref={searchInputRef}
+              type="text"
+              className="internal-search-input"
+              placeholder="Search your saved items..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+            {searchQuery && (
+              <span className="internal-search-count">
+                {filteredItems.length} / {items.length}
+              </span>
+            )}
+            <button className="internal-search-close" onClick={handleToggleSearch}>
+              <X size={16} />
             </button>
           </div>
-        )}
+        </div>
+      )}
+
+      {/* Items Grid */}
+      <main className="main-modern">
         {items.length === 0 ? (
           <div className="empty-state-modern">
             <div className="empty-state-icon">
@@ -371,17 +451,30 @@ export default function Dashboard({ items, alerts, onRefresh, apiBase }) {
             <p className="empty-state-text">
               Add your first item to begin monitoring prices and saving money
             </p>
-            <button 
-              className="btn-rainbow btn-rainbow-large"
-              onClick={() => setShowAddModal(true)}
-            >
-              <Sparkles size={16} />
-              <span>Track a New Item</span>
-            </button>
+          </div>
+        ) : filteredItems.length === 0 && searchQuery ? (
+          <div className="empty-state-modern fade-in">
+            <div className="empty-state-icon">
+              <Search size={48} style={{ opacity: 0.4 }} />
+            </div>
+            <h3 className="empty-state-title">No items found</h3>
+            <p className="empty-state-text">
+              Nothing matches "{searchQuery}" in your saved items
+            </p>
+          </div>
+        ) : filteredItems.length === 0 && activeFilter === 'drops' ? (
+          <div className="empty-state-modern fade-in">
+            <div className="empty-state-icon">
+              <TrendingUp size={48} style={{ opacity: 0.4 }} />
+            </div>
+            <h3 className="empty-state-title">No price drops yet</h3>
+            <p className="empty-state-text">
+              None of your items have dropped in price — keep tracking!
+            </p>
           </div>
         ) : (
           <div className="items-grid-modern">
-            {items.map((item, index) => (
+            {filteredItems.map((item, index) => (
               <ItemCard 
                 key={item.id} 
                 item={item} 
@@ -394,15 +487,31 @@ export default function Dashboard({ items, alerts, onRefresh, apiBase }) {
         )}
       </main>
 
+      {/* Fixed Bottom Action Bar */}
+      <nav className="action-buttons-bar">
+        <button className="action-btn action-btn-url" onClick={() => { setAddItemMode('url'); setShowAddModal(true); }}>
+          <div className="action-btn-icon"><LinkIcon size={20} /></div>
+        </button>
+
+        <button className="action-btn action-btn-photo" onClick={() => { setAddItemMode('product'); setShowAddModal(true); }}>
+          <div className="action-btn-icon"><Camera size={20} /></div>
+        </button>
+        <button className={`action-btn action-btn-search ${showSearch ? 'action-btn-active' : ''}`} onClick={handleToggleSearch}>
+          <div className="action-btn-icon"><Search size={20} /></div>
+        </button>
+      </nav>
+
       {/* Add Item Modal */}
       {showAddModal && (
         <AddItemModal 
-          onClose={() => setShowAddModal(false)}
+          onClose={() => { setShowAddModal(false); setAddItemMode(null); }}
           onSuccess={() => {
             setShowAddModal(false);
+            setAddItemMode(null);
             onRefresh();
           }}
           apiBase={apiBase}
+          initialMode={addItemMode}
         />
       )}
     </div>

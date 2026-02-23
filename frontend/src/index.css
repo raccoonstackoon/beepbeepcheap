@@ -17,6 +17,7 @@
   --pixel-sky-blue: #87CEEB;
   --pixel-peach: #FFB6C1;
   --pixel-yellow: #FFD700;
+  --pixel-orange: #FFA500;
   --pixel-mint: #98FB98;
   --pixel-lavender: #E6E6FA;
   --pixel-dark: #2C3E50;
@@ -118,4 +119,32 @@ button, a, input, textarea, select {
 [style*="font-size: var(--font-size-sm)"],
 [style*="font-size: 10px"] {
   letter-spacing: -0.5px;
+}
+
+/* Custom Scrollbar — translucent circular thumb */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(78, 205, 196, 0.25);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+  min-height: 8px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(78, 205, 196, 0.45);
+  background-clip: content-box;
+}
+
+/* Firefox scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(78, 205, 196, 0.25) transparent;
 }

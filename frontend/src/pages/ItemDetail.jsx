@@ -41,6 +41,8 @@ export default function ItemDetail({ apiBase, onRefresh }) {
   const [showWatchlistModal, setShowWatchlistModal] = useState(false);
   const [selectedAlternative, setSelectedAlternative] = useState(null);
   const [selectedAltIndex, setSelectedAltIndex] = useState(null);
+  const [savingAll, setSavingAll] = useState(false);
+  const [allSaved, setAllSaved] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -225,6 +227,35 @@ export default function ItemDetail({ apiBase, onRefresh }) {
     setSelectedAltIndex(null);
   };
 
+  const handleSaveAll = async () => {
+    setSavingAll(true);
+    try {
+      for (let i = 0; i < alternatives.length; i++) {
+        if (addedToWatchlist[i]) continue;
+        const alt = alternatives[i];
+        const res = await fetch(`${apiBase}/items/manual`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: alt.title,
+            url: alt.productUrl,
+            image_url: alt.imageUrl,
+            current_price: alt.price,
+            store_name: alt.storeName
+          })
+        });
+        if (res.ok) {
+          setAddedToWatchlist(prev => ({ ...prev, [i]: true }));
+        }
+      }
+      setAllSaved(true);
+      onRefresh();
+    } catch (error) {
+      console.error('Failed to save all:', error);
+    }
+    setSavingAll(false);
+  };
+
   if (loading) {
     return (
       <div className="loading-screen">
@@ -348,6 +379,60 @@ export default function ItemDetail({ apiBase, onRefresh }) {
           </div>
         </div>
 
+        {/* Tracked Sources - multiple stores for the same product */}
+        {item.tracked_sources && (() => {
+          let sources;
+          try { sources = JSON.parse(item.tracked_sources); } catch { sources = null; }
+          if (!sources || sources.length <= 1) return null;
+          
+          const cheapest = Math.min(...sources.filter(s => s.price).map(s => s.price));
+          
+          return (
+            <div className="alternatives-section card fade-in" style={{ animationDelay: '0.05s' }}>
+              <div className="alternatives-header">
+                <h2>Price Comparison</h2>
+                <span className="tracked-count">{sources.length} stores</span>
+              </div>
+              <div className="alternatives-list">
+                {sources.map((source, index) => (
+                  <div 
+                    key={index}
+                    className={`alternative-item ${source.price === cheapest ? 'is-cheaper' : 'is-more-expensive'}`}
+                  >
+                    <a 
+                      href={source.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="alt-link"
+                    >
+                      <div className="alt-rank">#{index + 1}</div>
+                      <div className="alt-info">
+                        <span className="alt-store">{source.storeName || 'Unknown Store'}</span>
+                        <span className="alt-title">{source.title?.substring(0, 80) || 'Product'}</span>
+                      </div>
+                      <div className="alt-price-section">
+                        <span className="alt-price">£{source.price?.toFixed(2) || '--'}</span>
+                        {source.price === cheapest && (
+                          <span className="alt-savings">
+                            <Sparkles size={12} />
+                            Cheapest
+                          </span>
+                        )}
+                        {source.price > cheapest && (
+                          <span className="alt-extra-cost">
+                            +£{(source.price - cheapest).toFixed(2)} more
+                          </span>
+                        )}
+                      </div>
+                      <ExternalLink size={14} className="alt-external" />
+                    </a>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
+
         {/* Find Cheaper Alternatives Section */}
         <div className="alternatives-section card fade-in" style={{ animationDelay: '0.05s' }}>
           <div className="alternatives-header">
@@ -407,6 +492,7 @@ export default function ItemDetail({ apiBase, onRefresh }) {
               )}
               
               {alternatives.length > 0 ? (
+                <>
                 <div className="alternatives-list">
                   {alternatives.map((alt, index) => (
                     <div 
@@ -441,32 +527,55 @@ export default function ItemDetail({ apiBase, onRefresh }) {
                         <ExternalLink size={14} className="alt-link-icon" />
                       </a>
                       
-                      {/* Add to Watchlist button for cheaper items */}
-                      {alt.isCheaper && (
-                        <button
-                          className={`btn-add-watchlist ${addedToWatchlist[index] ? 'added' : ''}`}
-                          onClick={(e) => handleTrackClick(alt, index, e)}
-                          disabled={addingToWatchlist[index] || addedToWatchlist[index]}
-                          title={addedToWatchlist[index] ? 'Added to watchlist!' : 'Track this price'}
-                        >
-                          {addingToWatchlist[index] ? (
-                            <RefreshCw size={14} className="spinning" />
-                          ) : addedToWatchlist[index] ? (
-                            <>
-                              <Check size={14} />
-                              <span>Added!</span>
-                            </>
-                          ) : (
-                            <>
-                              <PlusCircle size={14} />
-                              <span>Track</span>
-                            </>
-                          )}
-                        </button>
-                      )}
+                      <button
+                        className={`btn-add-watchlist ${addedToWatchlist[index] ? 'added' : ''}`}
+                        onClick={(e) => handleTrackClick(alt, index, e)}
+                        disabled={addingToWatchlist[index] || addedToWatchlist[index]}
+                        title={addedToWatchlist[index] ? 'Added to watchlist!' : 'Track this price'}
+                      >
+                        {addingToWatchlist[index] ? (
+                          <RefreshCw size={14} className="spinning" />
+                        ) : addedToWatchlist[index] ? (
+                          <>
+                            <Check size={14} />
+                            <span>Saved!</span>
+                          </>
+                        ) : (
+                          <>
+                            <PlusCircle size={14} />
+                            <span>Save</span>
+                          </>
+                        )}
+                      </button>
                     </div>
                   ))}
                 </div>
+
+                {alternatives.length > 1 && (
+                  <button
+                    className={`btn-save-all ${allSaved ? 'btn-save-all--done' : ''}`}
+                    onClick={handleSaveAll}
+                    disabled={savingAll || allSaved}
+                  >
+                    {savingAll ? (
+                      <>
+                        <RefreshCw size={14} className="spinning" />
+                        <span>Saving...</span>
+                      </>
+                    ) : allSaved ? (
+                      <>
+                        <Check size={14} />
+                        <span>All Saved!</span>
+                      </>
+                    ) : (
+                      <>
+                        <PlusCircle size={14} />
+                        <span>Save All {alternatives.length}</span>
+                      </>
+                    )}
+                  </button>
+                )}
+                </>
               ) : (
                 <div className="no-alternatives">
                   <p>No matching products found</p>

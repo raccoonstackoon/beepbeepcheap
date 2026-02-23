@@ -1,11 +1,18 @@
 import Database from 'better-sqlite3';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const dbPath = path.join(__dirname, '../../data/pricetracker.db');
+const dbPath = process.env.DATABASE_PATH || path.join(__dirname, '../../data/pricetracker.db');
+
+// Ensure the directory exists (needed for persistent disk mounts on Render)
+const dbDir = path.dirname(dbPath);
+if (!fs.existsSync(dbDir)) {
+  fs.mkdirSync(dbDir, { recursive: true });
+}
 
 let db;
 
@@ -39,6 +46,13 @@ export function initDatabase() {
   // Add store_name column if it doesn't exist (for existing databases)
   try {
     db.exec(`ALTER TABLE items ADD COLUMN store_name TEXT`);
+  } catch (e) {
+    // Column already exists, ignore
+  }
+  
+  // Add tracked_sources column (JSON array of alternative store listings for the same product)
+  try {
+    db.exec(`ALTER TABLE items ADD COLUMN tracked_sources TEXT`);
   } catch (e) {
     // Column already exists, ignore
   }
