@@ -4,6 +4,20 @@ import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 // Add stealth plugin to avoid bot detection
 puppeteer.use(StealthPlugin());
 
+// Shared browser launch config — uses system Chrome on Render, bundled Chrome locally
+const BROWSER_LAUNCH_OPTIONS = {
+  headless: true,
+  executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
+  args: [
+    '--no-sandbox',
+    '--disable-setuid-sandbox',
+    '--disable-dev-shm-usage',
+    '--disable-accelerated-2d-canvas',
+    '--disable-gpu',
+    '--window-size=1920,1080'
+  ]
+};
+
 /**
  * Extract store name from URL - DYNAMIC approach
  * Extracts the brand/store name from the domain, handles edge cases
@@ -90,17 +104,7 @@ export async function scrapeProduct(url) {
   try {
     console.log(`🔍 Starting scrape for: ${url}`);
     
-    browser = await puppeteer.launch({
-      headless: true,
-      args: [
-        '--no-sandbox', 
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-accelerated-2d-canvas',
-        '--disable-gpu',
-        '--window-size=1920,1080'
-      ]
-    });
+    browser = await puppeteer.launch(BROWSER_LAUNCH_OPTIONS);
     
     const page = await browser.newPage();
     
@@ -1189,18 +1193,8 @@ export async function searchGoogleLens(imagePath) {
   try {
     console.log(`🔍 Starting Google Lens visual search...`);
     console.log(`   Image: ${imagePath}`);
-    
-    browser = await puppeteer.launch({
-      headless: true,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-accelerated-2d-canvas',
-        '--disable-gpu',
-        '--window-size=1920,1080'
-      ]
-    });
+
+    browser = await puppeteer.launch(BROWSER_LAUNCH_OPTIONS);
     
     const page = await browser.newPage();
     await page.setViewport({ width: 1920, height: 1080 });
@@ -1530,18 +1524,8 @@ export async function searchWithBrand(imagePath, brandName) {
     console.log(`📷 VISUAL SEARCH using actual image`);
     console.log(`   Image: ${imagePath}`);
     console.log(`   Brand filter: ${brandName || 'none'}`);
-    
-    browser = await puppeteer.launch({
-      headless: true,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-accelerated-2d-canvas',
-        '--disable-gpu',
-        '--window-size=1920,1080'
-      ]
-    });
+
+    browser = await puppeteer.launch(BROWSER_LAUNCH_OPTIONS);
     
     const page = await browser.newPage();
     await page.setViewport({ width: 1920, height: 1080 });
@@ -1944,18 +1928,8 @@ export async function searchDuckDuckGoShopping(searchQuery) {
   
   try {
     console.log(`🛒 DuckDuckGo Shopping search for: ${searchQuery}`);
-    
-    browser = await puppeteer.launch({
-      headless: true,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-accelerated-2d-canvas',
-        '--disable-gpu',
-        '--window-size=1920,1080'
-      ]
-    });
+
+    browser = await puppeteer.launch(BROWSER_LAUNCH_OPTIONS);
     
     const page = await browser.newPage();
     await page.setViewport({ width: 1920, height: 1080 });
@@ -1973,9 +1947,13 @@ export async function searchDuckDuckGoShopping(searchQuery) {
     // Wait for shopping results to load
     await new Promise(resolve => setTimeout(resolve, 6000));
     
-    // Debug: log page title
+    // Debug: log page title and check for blocks
     const pageTitle = await page.title();
     console.log(`   Page title: ${pageTitle}`);
+    const bodyText = await page.evaluate(() => document.body?.innerText?.substring(0, 500) || '(empty page)');
+    console.log(`   Page preview: ${bodyText.substring(0, 200)}`);
+    const liCount = await page.evaluate(() => document.querySelectorAll('li').length);
+    console.log(`   Total <li> elements on page: ${liCount}`);
     
     // Extract shopping results from LI elements (DuckDuckGo's actual structure)
     const results = await page.evaluate(() => {
@@ -2191,18 +2169,8 @@ export async function searchGoogleShopping(searchQuery, preferredStore = null) {
   
   try {
     console.log(`🛒 Searching Google Shopping for: ${searchQuery}`);
-    
-    browser = await puppeteer.launch({
-      headless: true,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-accelerated-2d-canvas',
-        '--disable-gpu',
-        '--window-size=1920,1080'
-      ]
-    });
+
+    browser = await puppeteer.launch(BROWSER_LAUNCH_OPTIONS);
     
     const page = await browser.newPage();
     await page.setViewport({ width: 1920, height: 1080 });
@@ -2503,18 +2471,8 @@ export async function searchStoreForProduct(storeName, productName, targetPrice 
     }
     
     console.log(`🔍 Searching ${storeName} for: ${productName}`);
-    
-    browser = await puppeteer.launch({
-      headless: true,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-accelerated-2d-canvas',
-        '--disable-gpu',
-        '--window-size=1920,1080'
-      ]
-    });
+
+    browser = await puppeteer.launch(BROWSER_LAUNCH_OPTIONS);
     
     const page = await browser.newPage();
     await page.setViewport({ width: 1920, height: 1080 });
@@ -2757,11 +2715,8 @@ export async function searchCostco(searchQuery) {
   
   try {
     console.log(`🏪 Costco UK search for: ${searchQuery}`);
-    
-    browser = await puppeteer.launch({
-      headless: 'new',
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
-    });
+
+    browser = await puppeteer.launch(BROWSER_LAUNCH_OPTIONS);
     
     const page = await browser.newPage();
     

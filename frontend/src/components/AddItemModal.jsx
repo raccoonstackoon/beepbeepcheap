@@ -901,7 +901,7 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
               <div className="form-group">
                 <label>URL to Track</label>
                 <input
-                  type="url"
+                  type="text"
                   value={manualData.url}
                   onChange={(e) => setManualData({ ...manualData, url: e.target.value })}
                   placeholder="https://..."

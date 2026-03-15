@@ -276,11 +276,56 @@ router.post('/search', async (req, res) => {
 
     const shoppingResults = await searchDuckDuckGoShopping(searchQuery);
     const allResults = shoppingResults.results || [];
-    const topResults = allResults.slice(0, 3);
-    const backupResults = allResults.slice(3, 10);
+
+    // Extract meaningful search words for relevance filtering
+    const stopWords = new Set([
+      'a', 'an', 'the', 'and', 'or', 'for', 'in', 'on', 'at', 'to', 'of',
+      'is', 'it', 'by', 'with', 'from', 'as', 'be', 'was', 'are', 'but'
+    ]);
+    const searchWords = searchQuery
+      .toLowerCase()
+      .split(/\s+/)
+      .map(w => w.replace(/[^a-z0-9]/g, ''))
+      .filter(w => w.length >= 2 && !stopWords.has(w));
+
+    console.log(`   🎯 Relevance words: [${searchWords.join(', ')}]`);
+
+    // Score each result by how many search words appear in title OR store name
+    const scored = allResults.map(r => {
+      const titleLower = (r.title || '').toLowerCase();
+      const storeLower = (r.storeName || '').toLowerCase();
+      const combined = titleLower + ' ' + storeLower;
+      const matchCount = searchWords.filter(w => combined.includes(w)).length;
+      return { ...r, matchCount };
+    });
+
+    // Strict matches: title contains ALL search words
+    const strictMatches = scored
+      .filter(r => r.matchCount === searchWords.length)
+      .sort((a, b) => a.price - b.price);
+
+    let topResults;
+    let backupResults;
+
+    if (strictMatches.length > 0) {
+      topResults = strictMatches.slice(0, 3);
+      backupResults = strictMatches.slice(3, 10);
+      console.log(`   ✅ ${strictMatches.length} exact matches (all ${searchWords.length} words)`);
+    } else {
+      // Fallback: results matching at least half the search words,
+      // sorted by match count (most matches first), then price
+      const minWords = Math.max(1, Math.ceil(searchWords.length / 2));
+      const partialMatches = scored
+        .filter(r => r.matchCount >= minWords)
+        .sort((a, b) => b.matchCount - a.matchCount || a.price - b.price);
+
+      topResults = partialMatches.slice(0, 3);
+      backupResults = partialMatches.slice(3, 10);
+      console.log(`   ⚠️ No exact matches; ${partialMatches.length} partial matches (>=${minWords} of ${searchWords.length} words)`);
+    }
 
     for (const r of topResults) {
-      console.log(`   💰 £${r.price || 'N/A'} - ${r.title?.substring(0, 50)}... (${r.storeName})`);
+      console.log(`   💰 £${r.price || 'N/A'} - ${r.title?.substring(0, 50)}... (${r.storeName}) [${r.matchCount}/${searchWords.length} words]`);
     }
 
     res.json({

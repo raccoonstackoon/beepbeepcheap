@@ -77,7 +77,7 @@ export default function ItemCard({ item, apiBase, onRefresh, style }) {
       <div className="item-image-container">
         {item.image_url ? (
           <img 
-            src={item.image_url.startsWith('/') ? `http://localhost:3001${item.image_url}` : item.image_url} 
+            src={item.image_url} 
             alt={item.name}
             className="item-image"
             loading="lazy"
