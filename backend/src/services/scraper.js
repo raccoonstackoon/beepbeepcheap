@@ -1,13 +1,44 @@
 import puppeteer from 'puppeteer-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
+import fs from 'fs';
 
-// Add stealth plugin to avoid bot detection
 puppeteer.use(StealthPlugin());
 
-// Shared browser launch config — uses system Chrome on Render, bundled Chrome locally
+/**
+ * Find a working Chrome/Chromium executable.
+ * Priority: env var → common system paths → puppeteer's bundled Chrome (local dev)
+ */
+function findChromePath() {
+  if (process.env.PUPPETEER_EXECUTABLE_PATH) {
+    const envPath = process.env.PUPPETEER_EXECUTABLE_PATH;
+    if (fs.existsSync(envPath)) return envPath;
+    console.warn(`⚠️ PUPPETEER_EXECUTABLE_PATH set to "${envPath}" but file not found`);
+  }
+
+  const candidates = [
+    '/usr/bin/chromium',
+    '/usr/bin/chromium-browser',
+    '/usr/bin/google-chrome',
+    '/usr/bin/google-chrome-stable',
+    '/opt/google/chrome/google-chrome',
+  ];
+
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      console.log(`🌐 Found Chrome at: ${candidate}`);
+      return candidate;
+    }
+  }
+
+  // No system Chrome found — let puppeteer use its bundled version (local dev)
+  return undefined;
+}
+
+const resolvedChromePath = findChromePath();
+
 const BROWSER_LAUNCH_OPTIONS = {
   headless: true,
-  executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
+  executablePath: resolvedChromePath,
   args: [
     '--no-sandbox',
     '--disable-setuid-sandbox',

@@ -103,9 +103,33 @@ app.use('/api/alerts', alertsRouter);
 app.use('/api/rewards', rewardsRouter);
 app.use('/api/push', pushRouter);
 
-// Health check
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+// Health check with environment diagnostics
+app.get('/api/health', async (req, res) => {
+  const fs = await import('fs');
+
+  const chromePaths = [
+    process.env.PUPPETEER_EXECUTABLE_PATH,
+    '/usr/bin/chromium',
+    '/usr/bin/chromium-browser',
+    '/usr/bin/google-chrome-stable',
+    '/usr/bin/google-chrome',
+  ].filter(Boolean);
+
+  const chromeStatus = {};
+  for (const p of chromePaths) {
+    chromeStatus[p] = fs.existsSync(p);
+  }
+
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    env: {
+      NODE_ENV: process.env.NODE_ENV,
+      PUPPETEER_EXECUTABLE_PATH: process.env.PUPPETEER_EXECUTABLE_PATH || '(not set)',
+      PUPPETEER_SKIP_DOWNLOAD: process.env.PUPPETEER_SKIP_DOWNLOAD || '(not set)',
+    },
+    chrome: chromeStatus,
+  });
 });
 
 // Test endpoints — only available in development

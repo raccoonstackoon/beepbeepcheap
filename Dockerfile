@@ -13,9 +13,15 @@ RUN apt-get update && apt-get install -y \
     --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
+# Verify Chromium installed and log its location
+RUN which chromium || which chromium-browser || echo "WARNING: chromium not in PATH" \
+    && (chromium --version || chromium-browser --version || true)
+
 # Tell Puppeteer to skip downloading its bundled Chromium (we use the system one)
 ENV PUPPETEER_SKIP_DOWNLOAD=true
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+
+# Set Chrome path — the scraper also auto-detects, but this is the explicit hint
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 
 WORKDIR /app
