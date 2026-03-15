@@ -277,55 +277,74 @@ router.post('/search', async (req, res) => {
     const shoppingResults = await searchDuckDuckGoShopping(searchQuery);
     const allResults = shoppingResults.results || [];
 
-    // Extract meaningful search words for relevance filtering
+    // Split search words into identity words (product/brand name) vs spec words (sizes, dimensions)
     const stopWords = new Set([
       'a', 'an', 'the', 'and', 'or', 'for', 'in', 'on', 'at', 'to', 'of',
       'is', 'it', 'by', 'with', 'from', 'as', 'be', 'was', 'are', 'but'
     ]);
-    const searchWords = searchQuery
+    const allWords = searchQuery
       .toLowerCase()
       .split(/\s+/)
-      .map(w => w.replace(/[^a-z0-9]/g, ''))
+      .map(w => w.replace(/[^a-z0-9x×]/g, ''))
       .filter(w => w.length >= 2 && !stopWords.has(w));
 
-    console.log(`   🎯 Relevance words: [${searchWords.join(', ')}]`);
+    // Identity words = alphabetic (brand/product name like "rugvista", "quentin")
+    // Spec words = contain digits (sizes/dimensions like "200x300", "100ml")
+    const identityWords = allWords.filter(w => /^[a-z]+$/.test(w));
+    const specWords = allWords.filter(w => /\d/.test(w));
 
-    // Score each result by how many search words appear in title OR store name
+    console.log(`   🎯 Identity words: [${identityWords.join(', ')}]`);
+    console.log(`   📐 Spec words: [${specWords.join(', ')}]`);
+
+    // Helper: check if a spec word matches in text, handling dimension formatting
+    // "200x300" should match "200 x 300", "200×300", "200x300cm", etc.
+    const specWordMatches = (specWord, text) => {
+      if (text.includes(specWord)) return true;
+      const dimMatch = specWord.match(/^(\d+)x(\d+)$/);
+      if (dimMatch) {
+        const pattern = new RegExp(dimMatch[1] + '\\s*[x×]\\s*' + dimMatch[2], 'i');
+        return pattern.test(text);
+      }
+      return false;
+    };
+
+    // Score each result: identity match count + spec match count (tracked separately)
     const scored = allResults.map(r => {
       const titleLower = (r.title || '').toLowerCase();
       const storeLower = (r.storeName || '').toLowerCase();
       const combined = titleLower + ' ' + storeLower;
-      const matchCount = searchWords.filter(w => combined.includes(w)).length;
-      return { ...r, matchCount };
+      const idMatchCount = identityWords.filter(w => combined.includes(w)).length;
+      const specMatchCount = specWords.filter(w => specWordMatches(w, combined)).length;
+      return { ...r, idMatchCount, specMatchCount };
     });
 
-    // Strict matches: title contains ALL search words
-    const strictMatches = scored
-      .filter(r => r.matchCount === searchWords.length)
-      .sort((a, b) => a.price - b.price);
+    // Step 1: ALL identity words must match (this is the hard requirement)
+    const identityMatches = scored.filter(r => r.idMatchCount === identityWords.length);
 
     let topResults;
     let backupResults;
 
-    if (strictMatches.length > 0) {
-      topResults = strictMatches.slice(0, 3);
-      backupResults = strictMatches.slice(3, 10);
-      console.log(`   ✅ ${strictMatches.length} exact matches (all ${searchWords.length} words)`);
+    if (identityMatches.length > 0) {
+      // Sort by: most spec matches first, then cheapest price
+      identityMatches.sort((a, b) => b.specMatchCount - a.specMatchCount || a.price - b.price);
+      topResults = identityMatches.slice(0, 3);
+      backupResults = identityMatches.slice(3, 10);
+      console.log(`   ✅ ${identityMatches.length} product matches (all ${identityWords.length} identity words)`);
     } else {
-      // Fallback: results matching at least half the search words,
-      // sorted by match count (most matches first), then price
-      const minWords = Math.max(1, Math.ceil(searchWords.length / 2));
+      // Fallback: match at least half the identity words,
+      // sorted by identity match count (most first), then spec matches, then price
+      const minWords = Math.max(1, Math.ceil(identityWords.length / 2));
       const partialMatches = scored
-        .filter(r => r.matchCount >= minWords)
-        .sort((a, b) => b.matchCount - a.matchCount || a.price - b.price);
+        .filter(r => r.idMatchCount >= minWords)
+        .sort((a, b) => b.idMatchCount - a.idMatchCount || b.specMatchCount - a.specMatchCount || a.price - b.price);
 
       topResults = partialMatches.slice(0, 3);
       backupResults = partialMatches.slice(3, 10);
-      console.log(`   ⚠️ No exact matches; ${partialMatches.length} partial matches (>=${minWords} of ${searchWords.length} words)`);
+      console.log(`   ⚠️ No exact product matches; ${partialMatches.length} partial matches (>=${minWords} of ${identityWords.length} identity words)`);
     }
 
     for (const r of topResults) {
-      console.log(`   💰 £${r.price || 'N/A'} - ${r.title?.substring(0, 50)}... (${r.storeName}) [${r.matchCount}/${searchWords.length} words]`);
+      console.log(`   💰 £${r.price || 'N/A'} - ${r.title?.substring(0, 50)}... (${r.storeName}) [id:${r.idMatchCount}/${identityWords.length} spec:${r.specMatchCount}/${specWords.length}]`);
     }
 
     res.json({
