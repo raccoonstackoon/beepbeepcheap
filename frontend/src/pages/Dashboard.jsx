@@ -5,10 +5,9 @@ import {
   RefreshCw, 
   TrendingUp, 
   Minus,
-  Link as LinkIcon,
+  Plus,
   Camera,
   X,
-  Check,
   ExternalLink,
   Sparkles,
   Search
@@ -34,7 +33,7 @@ export default function Dashboard({ items, alerts, onRefresh, apiBase }) {
   const [activeFilter, setActiveFilter] = useState(null);
   
   // Internal search state
-  const [showSearch, setShowSearch] = useState(false);
+  const [showSearch, setShowSearch] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const searchInputRef = useRef(null);
   
@@ -97,15 +96,6 @@ export default function Dashboard({ items, alerts, onRefresh, apiBase }) {
       console.error('Failed to refresh:', error);
     }
     setRefreshing(false);
-  };
-
-  const handleMarkAllRead = async () => {
-    try {
-      await fetch(`${apiBase}/alerts/read-all`, { method: 'PUT' });
-      onRefresh();
-    } catch (error) {
-      console.error('Failed to mark alerts as read:', error);
-    }
   };
 
   // Create falling mascots randomly
@@ -357,18 +347,9 @@ export default function Dashboard({ items, alerts, onRefresh, apiBase }) {
       {/* Alerts Section */}
       {showAlerts && (
         <div className="alerts-modern fade-in">
-          <div className="alerts-modern-header">
-            <h3 className="alerts-modern-title">Price Alerts</h3>
-            {alerts.length > 0 && (
-              <button className="btn-modern btn-modern-ghost" onClick={handleMarkAllRead}>
-                <Check size={16} />
-                <span>Mark All Read</span>
-              </button>
-            )}
-          </div>
           {alerts.length === 0 ? (
             <div className="alerts-empty-modern">
-              <Bell size={48} />
+              <Bell size={28} />
               <p>No new alerts</p>
             </div>
           ) : (
@@ -415,29 +396,29 @@ export default function Dashboard({ items, alerts, onRefresh, apiBase }) {
       </section>
 
       {/* Internal Search Bar */}
-      {showSearch && (
-        <div className="internal-search-bar fade-in">
-          <div className="internal-search-container">
-            <Search size={16} className="internal-search-icon" />
-            <input
-              ref={searchInputRef}
-              type="text"
-              className="internal-search-input"
-              placeholder="Search your saved items..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-            {searchQuery && (
+      <div className="internal-search-bar">
+        <div className="internal-search-container">
+          <Search size={16} className="internal-search-icon" />
+          <input
+            ref={searchInputRef}
+            className="internal-search-input"
+            type="text"
+            placeholder="Search your saved items..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+          {searchQuery && (
+            <>
               <span className="internal-search-count">
                 {filteredItems.length} / {items.length}
               </span>
-            )}
-            <button className="internal-search-close" onClick={handleToggleSearch}>
-              <X size={16} />
-            </button>
-          </div>
+              <button className="internal-search-clear" onClick={() => setSearchQuery('')} aria-label="Clear search">
+                <X size={14} />
+              </button>
+            </>
+          )}
         </div>
-      )}
+      </div>
 
       {/* Items Grid */}
       <main className="main-modern">
@@ -489,16 +470,10 @@ export default function Dashboard({ items, alerts, onRefresh, apiBase }) {
 
       {/* Fixed Bottom Action Bar */}
       <nav className="action-buttons-bar">
-        <button className="action-btn action-btn-url" onClick={() => { setAddItemMode('url'); setShowAddModal(true); }}>
-          <div className="action-btn-icon"><LinkIcon size={20} /></div>
+        <button className="action-btn action-btn-url" onClick={() => { window.scrollTo({ top: 0, behavior: 'smooth' }); setAddItemMode('url'); setShowAddModal(true); }}>
+          <div className="action-btn-icon"><Plus size={16} /><span>ADD ITEM</span></div>
         </button>
 
-        <button className="action-btn action-btn-photo" onClick={() => { setAddItemMode('product'); setShowAddModal(true); }}>
-          <div className="action-btn-icon"><Camera size={20} /></div>
-        </button>
-        <button className={`action-btn action-btn-search ${showSearch ? 'action-btn-active' : ''}`} onClick={handleToggleSearch}>
-          <div className="action-btn-icon"><Search size={20} /></div>
-        </button>
       </nav>
 
       {/* Add Item Modal */}

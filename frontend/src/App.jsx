@@ -4,6 +4,7 @@ import Dashboard from './pages/Dashboard';
 import ItemDetail from './pages/ItemDetail';
 import Rewards from './pages/Rewards';
 import NotificationContainer from './components/NotificationContainer';
+import InstallPrompt from './components/InstallPrompt';
 import './App.css';
 
 // Dynamically determine API URL based on current host
@@ -58,6 +59,16 @@ function App() {
       setLoading(false);
     };
     init();
+
+    // Re-fetch data whenever the user returns to the app (tab switch, home screen, phone unlock)
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        fetchItems();
+        fetchAlerts();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
   }, []);
 
   const refreshData = () => {
@@ -82,6 +93,9 @@ function App() {
         apiBase={API_BASE} 
         onNewAlert={refreshData}
       />
+      
+      {/* PWA install prompt for mobile users */}
+      <InstallPrompt />
       
       <Routes>
         <Route 

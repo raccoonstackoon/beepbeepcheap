@@ -4,6 +4,7 @@ import {
   Camera, 
   Loader,
   ArrowRight,
+  ArrowLeft,
   ExternalLink,
   Check,
   Search
@@ -495,9 +496,44 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-        <button className="modal-close" onClick={onClose}>
-          <X size={20} />
-        </button>
+        <div className="modal-header">
+          {((extractedData && shoppingOptions.length > 0 && !selectedOption) ||
+            (extractedData && (selectedOption || (searchResults && !searchResults.found))) ||
+            (mode === 'product' && needsShopName && !loading)) && (
+            <button 
+              className="modal-back" 
+              onClick={() => {
+                if (selectedOption || (searchResults && !searchResults.found)) {
+                  setSelectedOption(null);
+                  if (searchResults) setSearchResults(null);
+                } else if (needsShopName) {
+                  setNeedsShopName(false);
+                  setImageFile(null);
+                  setImagePreview(null);
+                  setIdentifiedProduct(null);
+                  setProductNameInput('');
+                  setShopNameInput('');
+                } else {
+                  setExtractedData(null);
+                  setShoppingOptions([]);
+                  if (mode === 'product') setNeedsShopName(true);
+                }
+              }}
+              aria-label="Back"
+            >
+              <ArrowLeft size={18} />
+              <span>Back</span>
+            </button>
+          )}
+          {mode === 'url' && !extractedData && !loading && (
+            <p className="mode-description modal-header-desc">
+              Paste URL or search for the item
+            </p>
+          )}
+          <button className="modal-close" onClick={onClose}>
+            <X size={20} />
+          </button>
+        </div>
         
         {/* Hidden file input - triggered immediately when clicking "Take a Photo" */}
         <input
@@ -532,52 +568,44 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
         {/* Unified URL / Search Mode */}
         {mode === 'url' && !extractedData && !loading && (
           <div className="url-mode">
-            <p className="mode-description">
-              Paste a product URL or type a name to search for the best prices.
-            </p>
-            
-            <div className="input-group">
+            <div className="input-group input-group-inline input-nudge">
               <input
                 type="text"
-                placeholder="Paste URL or search e.g. dyson v15, nike air max..."
+                placeholder="e.g URL, Dyson V15, Chanel No5 100ml"
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleUnifiedSubmit()}
                 disabled={loading}
                 autoFocus
               />
-            </div>
-            
-            {inputValue.trim() && (
-              <p className="input-hint">
-                {isUrl(inputValue) ? '🔗 Looks like a URL — we\'ll fetch the product details' : '🔍 We\'ll search for the best prices online'}
-              </p>
-            )}
-            
-            {error && <p className="error-message">{error}</p>}
-            
-            <div className="modal-actions">
-              <button className="btn btn-secondary" onClick={() => setMode(null)}>
-                Back
-              </button>
-              <button 
-                className="btn btn-primary"
+              <button
+                className="input-inline-btn"
                 onClick={handleUnifiedSubmit}
                 disabled={!inputValue.trim() || loading}
+                aria-label="Search"
               >
                 {loading ? (
-                  <>
-                    <Loader size={18} className="spinning" />
-                    {isUrl(inputValue) ? 'Fetching...' : 'Searching...'}
-                  </>
+                  <Loader size={16} className="spinning" />
                 ) : (
-                  <>
-                    {isUrl(inputValue) ? 'Add Item' : 'Search'}
-                    <ArrowRight size={18} />
-                  </>
+                  <ArrowRight size={16} />
                 )}
               </button>
             </div>
+            
+            <div className="or-divider">OR</div>
+            
+            <div className="image-upload-area">
+              <button 
+                className="upload-label" 
+                type="button"
+                onClick={() => { setMode('product'); fileInputRef.current?.click(); }}
+              >
+                <Camera size={32} />
+                <span>Upload or take a photo of the item to find best price.</span>
+              </button>
+            </div>
+            
+            {error && <p className="error-message">{error}</p>}
           </div>
         )}
         
@@ -597,10 +625,6 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
         {/* Image Mode - Step 1: Upload (shown if user cancels file picker or needs to re-select) */}
         {mode === 'product' && !extractedData && !isAnnotating && !loading && !imageFile && !needsShopName && (
           <div className="image-mode">
-            <p className="mode-description">
-              Upload a photo of the product. We'll identify it and find the best price online.
-            </p>
-            
             <div className="image-upload-area">
               <button 
                 className="upload-label" 
@@ -608,17 +632,11 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
                 onClick={() => fileInputRef.current?.click()}
               >
                 <Camera size={32} />
-                <span>Click to upload or take a photo</span>
+                <span>Upload or take a photo of the item to find best price.</span>
               </button>
             </div>
             
             {error && <p className="error-message">{error}</p>}
-            
-            <div className="modal-actions">
-              <button className="btn btn-secondary" onClick={() => setMode(null)}>
-                Back
-              </button>
-            </div>
           </div>
         )}
         
@@ -641,6 +659,10 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
               {imagePreview && (
                 <img src={imagePreview} alt="Product" className="brand-preview-image" />
               )}
+              <div className="brand-detected-info">
+                <p className="detected-label">Product</p>
+                <p className="detected-product">{productNameInput || 'Identifying...'}</p>
+              </div>
             </div>
             
             <div className="brand-prompt">
@@ -657,7 +679,6 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
                   value={productNameInput}
                   onChange={(e) => setProductNameInput(e.target.value)}
                 />
-                <span className="form-hint">Edit if the AI got it wrong</span>
               </div>
               
               <div className="form-group">
@@ -669,7 +690,6 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
                   onChange={(e) => setShopNameInput(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleConfirmAndSearch()}
                 />
-                <span className="form-hint">Where did you buy it?</span>
               </div>
               
               {/* Variant fields - only show if we detected any */}
@@ -729,18 +749,11 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
               
               <div className="modal-actions">
                 <button 
-                  className="btn btn-secondary" 
-                  onClick={handleSkipShopName}
-                  disabled={!productNameInput.trim()}
-                >
-                  Search without brand
-                </button>
-                <button 
                   className="btn btn-primary"
                   onClick={handleConfirmAndSearch}
                   disabled={!shopNameInput.trim() || !productNameInput.trim()}
                 >
-                  Search
+                  Search for best price
                   <ArrowRight size={18} />
                 </button>
               </div>
@@ -764,10 +777,10 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
         {/* Shopping Options - User picks from top 3 cheapest */}
         {extractedData && shoppingOptions.length > 0 && !selectedOption && (
           <div className="shopping-options-mode">
-            <h3>Pick one to track</h3>
-            <p className="mode-description">
-              We found these options online. Select one to monitor its price:
-            </p>
+            <div className="shopping-options-header">
+              <h3>Select to track</h3>
+              <span className="shopping-options-count">{shoppingOptions.length} found</span>
+            </div>
             
             <div className="shopping-options-list">
               {shoppingOptions.map((option, index) => (
@@ -778,12 +791,14 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
                   role="button"
                   tabIndex={0}
                 >
-                  <div className="option-rank">#{index + 1}</div>
-                  {option.imageUrl && (
-                    <img src={option.imageUrl} alt={option.title} className="option-image" />
-                  )}
+                  <div className="option-image-wrap">
+                    {option.imageUrl && (
+                      <img src={option.imageUrl} alt={option.title} className="option-image" />
+                    )}
+                    <span className="option-rank">{index + 1}</span>
+                  </div>
                   <div className="option-details">
-                    <h4 className="option-title">{option.title?.substring(0, 60)}...</h4>
+                    <h4 className="option-title">{option.title}</h4>
                     <div className="option-meta">
                       <span className="option-store">{option.storeName}</span>
                       {option.price && (
@@ -791,58 +806,40 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
                       )}
                     </div>
                   </div>
-                  <div className="option-actions">
-                    <ExternalLink size={16} className="option-arrow" />
-                    <button 
-                      className="option-dismiss"
-                      onClick={(e) => { e.stopPropagation(); handleDismissOption(index); }}
-                      title="Remove this result"
-                    >
-                      <X size={14} />
-                    </button>
-                  </div>
+                  <button 
+                    className="option-dismiss"
+                    onClick={(e) => { e.stopPropagation(); handleDismissOption(index); }}
+                    title="Remove this result"
+                    aria-label="Remove"
+                  >
+                    <X size={12} />
+                  </button>
                 </div>
               ))}
             </div>
             
-            <div className="shopping-options-footer">
-              <p className="form-help">
-                Can't find what you're looking for?
-              </p>
-                <button 
-                  className="btn btn-link"
-                  onClick={() => {
-                    // Allow manual entry - use server-side image URL, not blob URL
-                    setSelectedOption({ manual: true });
-                    setManualData({
-                      name: identifiedProduct?.itemName || '',
-                      url: '',
-                      price: '',
-                      imageUrl: identifiedProduct?.localImageUrl || '',
-                      storeName: ''
-                    });
-                  }}
-                >
-                  Enter details manually
-                </button>
-            </div>
-            
             {error && <p className="error-message">{error}</p>}
             
-            <div className="modal-actions">
+            <div className="shopping-options-footer">
               <button 
-                className="btn btn-secondary" 
+                className="btn-manual-entry"
                 onClick={() => {
-                  setExtractedData(null);
-                  setShoppingOptions([]);
-                  if (mode === 'product') {
-                    setNeedsShopName(true);
-                  }
+                  setSelectedOption({ manual: true });
+                  setManualData({
+                    name: identifiedProduct?.itemName || '',
+                    url: '',
+                    price: '',
+                    imageUrl: identifiedProduct?.localImageUrl || '',
+                    storeName: ''
+                  });
                 }}
               >
-                Back
+                Can't find it? Enter manually
               </button>
-              {shoppingOptions.length > 1 && (
+            </div>
+            
+            {shoppingOptions.length > 1 && (
+              <div className="modal-actions">
                 <button 
                   className="btn btn-primary"
                   onClick={handleTrackAll}
@@ -856,12 +853,11 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
                   ) : (
                     <>
                       Track All {shoppingOptions.length}
-                      <Check size={18} />
                     </>
                   )}
                 </button>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         )}
         
@@ -943,20 +939,6 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
             {error && <p className="error-message">{error}</p>}
             
             <div className="modal-actions">
-              <button 
-                className="btn btn-secondary" 
-                onClick={() => {
-                  setSelectedOption(null);
-                  if (shoppingOptions.length > 0) {
-                    // Go back to options
-                  } else {
-                    setExtractedData(null);
-                    setSearchResults(null);
-                  }
-                }}
-              >
-                Back
-              </button>
               <button 
                 className="btn btn-primary"
                 onClick={handleConfirmSelection}

@@ -62,15 +62,15 @@
   --font-size-2xl: 24px;
   
   /* Borders */
-  --border-width: 3px;
+  --border-width: 1px;
   --border-radius-sm: 4px;
   --border-radius-md: 8px;
   --border-radius-lg: 12px;
   
-  /* Shadows (pixel-style) */
-  --shadow-pixel: 4px 4px 0px var(--pixel-outline);
+  /* Shadows (bottom-right) */
+  --shadow-pixel: 2px 2px 0px var(--pixel-outline);
   --shadow-pixel-sm: 2px 2px 0px var(--pixel-outline);
-  --shadow-pixel-lg: 6px 6px 0px var(--pixel-outline);
+  --shadow-pixel-lg: 2px 2px 0px var(--pixel-outline);
 }
 
 body {
@@ -133,7 +133,7 @@ button, a, input, textarea, select {
 ::-webkit-scrollbar-thumb {
   background: rgba(78, 205, 196, 0.25);
   border-radius: 999px;
-  border: 2px solid transparent;
+  border: 1px solid transparent;
   background-clip: content-box;
   min-height: 8px;
 }

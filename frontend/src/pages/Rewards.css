@@ -33,8 +33,8 @@
   gap: var(--space-xs);
   padding: var(--space-xs) var(--space-sm);
   background: var(--bg-card);
-  border: 2px solid var(--pixel-outline);
-  border-radius: var(--border-radius-sm);
+  border: 1px solid var(--pixel-outline);
+  border-radius: var(--border-radius-md);
   font-family: var(--font-pixel);
   font-size: var(--font-size-xs);
   color: var(--text-primary);
@@ -62,8 +62,8 @@
   gap: var(--space-lg);
   padding: var(--space-xl);
   background: #ffb5c5;
-  border: 3px solid var(--pixel-outline);
-  border-radius: var(--border-radius-lg);
+  border: 1px solid var(--pixel-outline);
+  border-radius: var(--border-radius-md);
   box-shadow: var(--shadow-pixel-lg);
   margin-bottom: var(--space-lg);
 }
@@ -162,7 +162,7 @@
   gap: var(--space-md);
   padding: var(--space-lg);
   background: var(--bg-card);
-  border: 2px solid var(--pixel-outline);
+  border: 1px solid var(--pixel-outline);
   border-radius: var(--border-radius-md);
   box-shadow: var(--shadow-pixel);
   margin-bottom: var(--space-xl);
@@ -175,8 +175,8 @@
   width: 56px;
   height: 56px;
   background: var(--pixel-yellow);
-  border: 2px solid var(--pixel-outline);
-  border-radius: var(--border-radius-sm);
+  border: 1px solid var(--pixel-outline);
+  border-radius: var(--border-radius-md);
   color: var(--pixel-dark);
   animation: flame-pulse 1s ease-in-out infinite;
 }
@@ -239,7 +239,7 @@
   gap: var(--space-md);
   padding: var(--space-md);
   background: var(--bg-card);
-  border: 2px solid var(--pixel-outline);
+  border: 1px solid var(--pixel-outline);
   border-radius: var(--border-radius-md);
   box-shadow: var(--shadow-pixel-sm);
   transition: all 0.1s ease;
@@ -263,8 +263,8 @@
   justify-content: center;
   width: 40px;
   height: 40px;
-  border: 2px solid var(--pixel-outline);
-  border-radius: var(--border-radius-sm);
+  border: 1px solid var(--pixel-outline);
+  border-radius: var(--border-radius-md);
   color: var(--pixel-white);
   flex-shrink: 0;
 }
@@ -315,7 +315,7 @@
 .tips-section {
   padding: var(--space-lg);
   background: var(--bg-secondary);
-  border: 2px dashed var(--pixel-outline);
+  border: 1px dashed var(--pixel-outline);
   border-radius: var(--border-radius-md);
 }
 

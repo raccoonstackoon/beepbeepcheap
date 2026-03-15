@@ -28,8 +28,8 @@
   align-items: center;
   justify-content: center;
   background: #FF6B35;
-  border: 2px solid var(--pixel-outline);
-  border-radius: var(--border-radius-sm);
+  border: 1px solid var(--pixel-outline);
+  border-radius: var(--border-radius-md);
   color: white;
   flex-shrink: 0;
   box-shadow: var(--shadow-pixel-sm);
@@ -39,7 +39,7 @@
 .instruction-text h4 {
   font-family: var(--font-pixel);
   font-size: var(--font-size-xs);
-  color: var(--pixel-dark);
+  color: white;
   margin-bottom: 2px;
   text-transform: uppercase;
 }
@@ -47,7 +47,7 @@
 .instruction-text p {
   font-family: var(--font-pixel);
   font-size: 10px;
-  color: var(--pixel-dark);
+  color: white;
   margin: 0;
   line-height: 1.3;
 }
@@ -184,7 +184,7 @@
   gap: var(--space-sm);
   font-family: var(--font-pixel);
   font-size: var(--font-size-xs);
-  color: var(--text-secondary);
+  color: white;
   text-align: center;
   padding: var(--space-xs) 0;
 }
@@ -208,6 +208,16 @@
   padding: var(--space-xs) var(--space-md);
   font-size: var(--font-size-xs);
   box-shadow: var(--shadow-pixel-sm);
+  color: white;
+}
+
+.annotator-actions .btn-secondary {
+  background: rgba(0, 0, 0, 0.6);
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+.annotator-actions .btn-secondary:hover {
+  background: rgba(0, 0, 0, 0.8);
 }
 
 .annotator-actions .btn svg {
@@ -223,8 +233,8 @@
   right: var(--space-sm);
   padding: var(--space-xs) var(--space-sm);
   background: var(--pixel-dark);
-  border: 2px solid var(--pixel-outline);
-  border-radius: var(--border-radius-sm);
+  border: 1px solid var(--pixel-outline);
+  border-radius: var(--border-radius-md);
   font-family: var(--font-pixel);
   font-size: var(--font-size-xs);
   color: var(--pixel-yellow);

@@ -34,7 +34,7 @@
 .loading-spinner {
   width: 32px;
   height: 32px;
-  border: 3px solid var(--pixel-outline);
+  border: 1px solid var(--pixel-outline);
   border-top-color: var(--pixel-teal);
   border-right-color: var(--pixel-teal);
   border-bottom-color: transparent;
@@ -81,8 +81,8 @@ h3 {
   justify-content: center;
   gap: var(--space-sm);
   padding: var(--space-md) var(--space-lg);
-  border: var(--border-width) solid var(--pixel-outline);
-  border-radius: var(--border-radius-sm);
+  border: 1px solid var(--pixel-outline);
+  border-radius: var(--border-radius-md);
   font-family: var(--font-pixel);
   font-size: var(--font-size-sm);
   color: var(--pixel-white);
@@ -96,8 +96,8 @@ h3 {
 }
 
 .btn:hover {
-  transform: translate(-2px, -2px);
-  box-shadow: 6px 6px 0px var(--pixel-outline);
+  transform: translate(-1px, -1px);
+  box-shadow: 2px 2px 0px var(--pixel-outline);
   animation: button-pop 0.2s ease;
 }
 
@@ -146,7 +146,13 @@ h3 {
   width: 32px;
   height: 32px;
   padding: 0;
-  border-radius: var(--border-radius-sm);
+  border-radius: var(--border-radius-md);
+}
+
+.btn svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
 }
 
 .btn:disabled {
@@ -162,20 +168,19 @@ input, textarea {
   padding: var(--space-md);
   background: var(--bg-card);
   border: var(--border-width) solid var(--pixel-outline);
-  border-radius: var(--border-radius-sm);
+  border-radius: var(--border-radius-md);
   font-family: var(--font-pixel);
   font-size: var(--font-size-sm);
   color: var(--text-primary);
   transition: all 0.1s ease;
-  box-shadow: inset 2px 2px 0px var(--pixel-outline);
-  image-rendering: pixelated;
+  box-shadow: 2px 2px 0px var(--pixel-outline);
   letter-spacing: -0.5px;
 }
 
 input:focus, textarea:focus {
   outline: none;
   border-color: var(--pixel-teal);
-  box-shadow: inset 2px 2px 0px var(--pixel-outline), 0 0 0 3px var(--pixel-teal);
+  box-shadow: 2px 2px 0px var(--pixel-outline);
   background: var(--bg-card-hover);
 }
 
@@ -196,8 +201,8 @@ input::placeholder, textarea::placeholder {
 }
 
 .card:hover {
-  transform: translate(-2px, -2px);
-  box-shadow: 6px 6px 0px var(--pixel-outline);
+  transform: translate(-1px, -1px);
+  box-shadow: 2px 2px 0px var(--pixel-outline);
 }
 
 /* Retro Pixel Badges */
@@ -205,8 +210,8 @@ input::placeholder, textarea::placeholder {
   display: inline-flex;
   align-items: center;
   padding: var(--space-xs) var(--space-sm);
-  border: 2px solid var(--pixel-outline);
-  border-radius: var(--border-radius-sm);
+  border: 1px solid var(--pixel-outline);
+  border-radius: var(--border-radius-md);
   font-family: var(--font-pixel);
   font-size: var(--font-size-xs);
   text-transform: uppercase;
@@ -290,13 +295,13 @@ input::placeholder, textarea::placeholder {
 
 ::-webkit-scrollbar-track {
   background: var(--bg-secondary);
-  border: 2px solid var(--pixel-outline);
+  border: 1px solid var(--pixel-outline);
   image-rendering: pixelated;
 }
 
 ::-webkit-scrollbar-thumb {
   background: var(--pixel-teal);
-  border: 2px solid var(--pixel-outline);
+  border: 1px solid var(--pixel-outline);
   image-rendering: pixelated;
 }
 

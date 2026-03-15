@@ -1,4 +1,5 @@
 import { getDatabase } from './init.js';
+import { sendPushToAll } from '../services/push.js';
 
 // Will be set by index.js after WebSocket is initialized
 let broadcastFunction = null;
@@ -133,20 +134,29 @@ export function createAlert(itemId, oldPrice, newPrice) {
     VALUES (?, ?, ?)
   `).run(itemId, oldPrice, newPrice);
   
-  // Broadcast to connected WebSocket clients
+  const item = getItemById(itemId);
+  const alert = {
+    id: result.lastInsertRowid,
+    item_id: itemId,
+    item_name: item?.name,
+    image_url: item?.image_url,
+    old_price: oldPrice,
+    new_price: newPrice,
+    created_at: new Date().toISOString()
+  };
+
+  // Broadcast to connected WebSocket clients (in-app toast)
   if (broadcastFunction) {
-    const item = getItemById(itemId);
-    const alert = {
-      id: result.lastInsertRowid,
-      item_id: itemId,
-      item_name: item?.name,
-      image_url: item?.image_url,
-      old_price: oldPrice,
-      new_price: newPrice,
-      created_at: new Date().toISOString()
-    };
     broadcastFunction(alert);
   }
+
+  // Send push notification (works even when app is closed)
+  const drop = ((oldPrice - newPrice) / oldPrice * 100).toFixed(0);
+  sendPushToAll({
+    title: `Price dropped ${drop}%!`,
+    body: `${item?.name || 'An item'}: £${oldPrice.toFixed(2)} → £${newPrice.toFixed(2)}`,
+    url: `/items/${itemId}`
+  }).catch(err => console.error('Push notification error:', err));
 }
 
 export function markAlertAsRead(id) {
@@ -162,6 +172,26 @@ export function markAllAlertsAsRead() {
 export function deleteAlert(id) {
   const db = getDatabase();
   db.prepare('DELETE FROM alerts WHERE id = ?').run(id);
+}
+
+// ============ PUSH SUBSCRIPTIONS ============
+
+export function savePushSubscription(subscription) {
+  const db = getDatabase();
+  db.prepare(`
+    INSERT OR REPLACE INTO push_subscriptions (endpoint, keys_p256dh, keys_auth)
+    VALUES (?, ?, ?)
+  `).run(subscription.endpoint, subscription.keys.p256dh, subscription.keys.auth);
+}
+
+export function removePushSubscription(endpoint) {
+  const db = getDatabase();
+  db.prepare('DELETE FROM push_subscriptions WHERE endpoint = ?').run(endpoint);
+}
+
+export function getAllPushSubscriptions() {
+  const db = getDatabase();
+  return db.prepare('SELECT * FROM push_subscriptions').all();
 }
 
 // ============ REWARDS ============

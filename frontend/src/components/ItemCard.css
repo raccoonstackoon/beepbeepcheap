@@ -6,8 +6,8 @@
   background: rgba(255, 255, 255, 0.3) !important;
   backdrop-filter: blur(30px) saturate(200%) !important;
   -webkit-backdrop-filter: blur(30px) saturate(200%) !important;
-  border: 3px solid rgba(255, 255, 255, 0.6) !important;
-  border-radius: 16px !important;
+  border: 1px solid rgba(255, 255, 255, 0.6) !important;
+  border-radius: var(--border-radius-md) !important;
   text-decoration: none;
   color: inherit;
   transition: all 0.1s ease;
@@ -77,7 +77,7 @@
   gap: var(--space-xs);
   padding: var(--space-xs) var(--space-sm);
   border: 1px solid #666;
-  border-radius: var(--border-radius-sm);
+  border-radius: var(--border-radius-md);
   font-family: var(--font-pixel);
   font-size: var(--font-size-xs);
   text-transform: uppercase;
@@ -93,7 +93,7 @@
 }
 
 .price-change-badge.dropped {
-  background: #4ECDC4;
+  background: #EF4444;
   color: white;
 }
 
@@ -123,7 +123,7 @@
   -webkit-text-stroke: 0.5px #666;
   text-shadow: none;
   border: 1px solid #666;
-  border-radius: var(--border-radius-sm);
+  border-radius: var(--border-radius-md);
 }
 
 .item-name {
@@ -186,7 +186,7 @@
   background: #4ECDC4;
   color: white;
   border: 1px solid #666;
-  border-radius: var(--border-radius-sm);
+  border-radius: var(--border-radius-md);
   font-family: var(--font-pixel);
   font-size: var(--font-size-xs);
   text-transform: uppercase;
@@ -226,7 +226,7 @@
   margin-top: var(--space-xs);
   background: var(--bg-card);
   border: 1px solid #666;
-  border-radius: var(--border-radius-sm);
+  border-radius: var(--border-radius-md);
   padding: var(--space-xs);
   min-width: 100px;
   z-index: 1000;
@@ -244,7 +244,7 @@
   padding: var(--space-sm) var(--space-md);
   background: none;
   border: none;
-  border-radius: var(--border-radius-sm);
+  border-radius: var(--border-radius-md);
   font-family: var(--font-pixel);
   font-size: var(--font-size-xs);
   color: var(--text-primary);

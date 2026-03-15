@@ -30,6 +30,9 @@ npm-debug.log*
 # Uploaded files
 backend/uploads/
 
+# VAPID keys (push notification secrets)
+backend/data/vapid-keys.json
+
 
 
 

@@ -12,7 +12,9 @@ import { setBroadcastFunction } from './database/queries.js';
 import itemsRouter from './routes/items.js';
 import alertsRouter from './routes/alerts.js';
 import rewardsRouter from './routes/rewards.js';
+import pushRouter from './routes/push.js';
 import { startScheduler } from './services/scheduler.js';
+import { initPush } from './services/push.js';
 
 // Load environment variables
 dotenv.config();
@@ -92,10 +94,14 @@ initDatabase();
 // Connect WebSocket broadcast to database alerts
 setBroadcastFunction(broadcastPriceDropAlert);
 
+// Initialize push notifications (generates VAPID keys on first run)
+initPush();
+
 // Routes
 app.use('/api/items', itemsRouter);
 app.use('/api/alerts', alertsRouter);
 app.use('/api/rewards', rewardsRouter);
+app.use('/api/push', pushRouter);
 
 // Health check
 app.get('/api/health', (req, res) => {

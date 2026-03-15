@@ -1,0 +1,223 @@
+/* Install Prompt - Retro Pixel Style */
+
+.install-prompt-overlay {
+  position: fixed;
+  bottom: 100px;
+  left: 0;
+  right: 0;
+  z-index: 9999;
+  display: flex;
+  justify-content: center;
+  padding: 0 var(--space-md);
+  pointer-events: none;
+}
+
+.install-prompt {
+  pointer-events: all;
+  background: var(--bg-card);
+  border: var(--border-width) solid var(--pixel-outline);
+  border-radius: var(--border-radius-md);
+  padding: var(--space-lg);
+  max-width: 380px;
+  width: 100%;
+  box-shadow: var(--shadow-pixel-lg);
+  position: relative;
+  animation: prompt-slide-up 0.4s ease-out;
+}
+
+@keyframes prompt-slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.install-prompt-close {
+  position: absolute;
+  top: var(--space-sm);
+  right: var(--space-sm);
+  background: transparent;
+  border: 1px solid var(--pixel-outline);
+  border-radius: var(--border-radius-md);
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  transition: all 0.1s ease;
+}
+
+.install-prompt-close:hover {
+  background: var(--accent-danger);
+  color: var(--pixel-white);
+}
+
+.install-prompt-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  margin-bottom: var(--space-lg);
+}
+
+.install-prompt-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--border-radius-md);
+  border: 1px solid var(--pixel-outline);
+  box-shadow: var(--shadow-pixel-sm);
+  flex-shrink: 0;
+}
+
+.install-prompt-title {
+  font-family: var(--font-pixel);
+  font-size: var(--font-size-sm);
+  color: var(--pixel-teal);
+  margin-bottom: 4px;
+  -webkit-text-stroke: 0;
+  text-shadow: none;
+}
+
+.install-prompt-subtitle {
+  font-family: var(--font-pixel);
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+/* Steps */
+
+.install-steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.install-step {
+  display: flex;
+  gap: var(--space-md);
+  padding: var(--space-sm);
+  border-radius: var(--border-radius-md);
+  border: 1px solid transparent;
+  transition: all 0.2s ease;
+  opacity: 0.4;
+}
+
+.install-step-active {
+  opacity: 1;
+  border-color: var(--pixel-teal);
+  background: rgba(78, 205, 196, 0.08);
+}
+
+.install-step-done {
+  opacity: 0.6;
+}
+
+.install-step-number {
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  border: 1px solid var(--pixel-outline);
+  border-radius: var(--border-radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-pixel);
+  font-size: var(--font-size-xs);
+  color: var(--pixel-teal);
+  background: var(--bg-secondary);
+  box-shadow: var(--shadow-pixel-sm);
+}
+
+.install-step-active .install-step-number {
+  background: var(--pixel-teal);
+  color: var(--pixel-white);
+}
+
+.install-step-done .install-step-number {
+  background: var(--pixel-mint);
+  color: var(--pixel-dark);
+}
+
+.install-step-content p {
+  font-family: var(--font-pixel);
+  font-size: var(--font-size-xs);
+  line-height: 1.6;
+  color: var(--text-primary);
+}
+
+.install-step-content strong {
+  color: var(--pixel-teal);
+}
+
+.install-step-icon-hint {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-top: var(--space-xs);
+  color: var(--text-muted);
+  font-family: var(--font-pixel);
+  font-size: 7px;
+}
+
+.install-step-icon-hint svg {
+  color: var(--pixel-sky-blue);
+  flex-shrink: 0;
+}
+
+/* Navigation buttons */
+
+.install-step-nav {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-sm);
+  margin-top: var(--space-sm);
+}
+
+.btn-install {
+  font-family: var(--font-pixel);
+  font-size: var(--font-size-xs);
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--pixel-outline);
+  border-radius: var(--border-radius-md);
+  box-shadow: var(--shadow-pixel-sm);
+  transition: all 0.1s ease;
+  text-transform: uppercase;
+}
+
+.btn-install:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 2px 2px 0px var(--pixel-outline);
+}
+
+.btn-install:active {
+  transform: translate(1px, 1px);
+  box-shadow: 1px 1px 0px var(--pixel-outline);
+}
+
+.btn-install-primary {
+  background: var(--pixel-teal);
+  color: var(--pixel-white);
+}
+
+.btn-install-ghost {
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+/* Generic (non-iOS) text */
+
+.install-generic-text {
+  font-family: var(--font-pixel);
+  font-size: var(--font-size-xs);
+  line-height: 1.8;
+  color: var(--text-primary);
+}
+
+.install-generic-text strong {
+  color: var(--pixel-teal);
+}

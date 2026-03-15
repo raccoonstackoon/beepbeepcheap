@@ -285,10 +285,15 @@ export async function scrapeProduct(url) {
       // Helper to clean price string and extract number
       const cleanPrice = (priceStr) => {
         if (!priceStr) return null;
-        // Remove currency symbols and extract number
         const cleaned = priceStr.replace(/[^0-9.,]/g, '');
-        // Handle different number formats
-        const match = cleaned.match(/(\d{1,3}(?:,\d{3})*(?:\.\d{2})?|\d+(?:\.\d{2})?)/);
+
+        // European format: 1.499,99 (dot as thousands, comma as decimal)
+        if (/^\d{1,3}(\.\d{3})+(,\d{2})?$/.test(cleaned)) {
+          return parseFloat(cleaned.replace(/\./g, '').replace(',', '.'));
+        }
+
+        // Standard format: 1,499.99 or 1499.99
+        const match = cleaned.match(/(\d{1,3}(?:,\d{3})*(?:\.\d{2})?|\d+(?:\.\d{1,2})?)/);
         if (match) {
           return parseFloat(match[0].replace(/,/g, ''));
         }
@@ -320,9 +325,11 @@ export async function scrapeProduct(url) {
       let price = null;
       
       // Helper to extract price from JSON-LD structured data
+      // Prefers GBP offers; falls back to first available price
       const getJsonLdPrice = () => {
         try {
           const ldJsonElements = document.querySelectorAll('script[type="application/ld+json"]');
+          let fallbackPrice = null;
           for (const ldJson of ldJsonElements) {
             const data = JSON.parse(ldJson.textContent);
             const items = Array.isArray(data) ? data : [data];
@@ -332,12 +339,19 @@ export async function scrapeProduct(url) {
                 const offers = Array.isArray(product.offers) ? product.offers : [product.offers];
                 for (const offer of offers) {
                   if (offer.price) {
-                    return parseFloat(offer.price);
+                    const currency = (offer.priceCurrency || '').toUpperCase();
+                    if (currency === 'GBP') {
+                      return parseFloat(offer.price);
+                    }
+                    if (fallbackPrice === null) {
+                      fallbackPrice = parseFloat(offer.price);
+                    }
                   }
                 }
               }
             }
           }
+          return fallbackPrice;
         } catch (e) {}
         return null;
       };
@@ -506,10 +520,10 @@ export async function scrapeProduct(url) {
         }
       }
       
-      // Try to find price from page text using regex
+      // Try to find price from page text using regex (supports £, $, €)
       if (!price) {
         const bodyText = document.body.innerText;
-        const priceMatches = bodyText.match(/\$\s*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/g);
+        const priceMatches = bodyText.match(/[£$€]\s*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/g);
         if (priceMatches && priceMatches.length > 0) {
           // Try to find a reasonable price (not too small, not too large)
           for (const match of priceMatches) {
@@ -1974,8 +1988,8 @@ export async function searchDuckDuckGoShopping(searchQuery) {
         try {
           const text = li.innerText || '';
           
-          // Must have a price (£X.XX pattern)
-          const priceMatch = text.match(/£(\d+\.\d{2})/);
+          // Must have a price (£X.XX or £X,XXX.XX pattern)
+          const priceMatch = text.match(/£([\d,]+\.\d{2})/);
           if (!priceMatch) continue;
           
           // Skip filter/menu items
@@ -2007,7 +2021,7 @@ export async function searchDuckDuckGoShopping(searchQuery) {
           // ═══════════════════════════════════════════════════════════════════
           
           // Find all prices in the text
-          const allPrices = text.match(/£\d+\.?\d*/g) || [];
+          const allPrices = text.match(/£[\d,]+\.?\d*/g) || [];
           
           // Get text after the last price - this often contains the store name
           let storeName = '';
@@ -2105,7 +2119,7 @@ export async function searchDuckDuckGoShopping(searchQuery) {
           }
           
           // Extract price (first price is usually the current/sale price)
-          const price = parseFloat(priceMatch[1]);
+          const price = parseFloat(priceMatch[1].replace(/,/g, ''));
           
           // Skip duplicates
           const titleStart = title.substring(0, 40).toLowerCase();
@@ -2775,7 +2789,7 @@ export async function searchCostco(searchQuery) {
           // Extract price from the text (format: "£99.99" or "£1,899.99")
           const priceMatch = fullText.match(/£([\d,]+\.?\d*)/);
           if (!priceMatch) continue;
-          const price = parseFloat(priceMatch[1].replace(',', ''));
+          const price = parseFloat(priceMatch[1].replace(/,/g, ''));
           
           // Get product link and title
           const linkEl = item.querySelector('a[href*="/p/"], a[href*="/product/"]');
@@ -2839,7 +2853,7 @@ export async function searchCostco(searchQuery) {
             const priceMatch = priceText.match(/£([\d,]+\.?\d*)/);
             if (!priceMatch) continue;
             
-            const price = parseFloat(priceMatch[1].replace(',', ''));
+            const price = parseFloat(priceMatch[1].replace(/,/g, ''));
             const linkEl = prod.querySelector('a');
             if (!linkEl) continue;
             

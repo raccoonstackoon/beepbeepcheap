@@ -69,27 +69,45 @@ self.addEventListener('fetch', (event) => {
   );
 });
 
-// Handle push notifications (for future use)
+// Handle push notifications from the server
 self.addEventListener('push', (event) => {
+  let data = { title: 'Price drop!', body: 'One of your items got cheaper.', url: '/' };
+
+  try {
+    if (event.data) data = Object.assign(data, event.data.json());
+  } catch (e) {
+    if (event.data) data.body = event.data.text();
+  }
+
   const options = {
-    body: event.data ? event.data.text() : 'Price drop alert!',
+    body: data.body,
     icon: '/icons/icon-192.png',
     badge: '/icons/icon-192.png',
     vibrate: [100, 50, 100],
-    tag: 'price-drop',
-    renotify: true
+    tag: 'price-drop-' + Date.now(),
+    renotify: true,
+    data: { url: data.url || '/' }
   };
 
   event.waitUntil(
-    self.registration.showNotification('🚗 beepbeep.cheap', options)
+    self.registration.showNotification(data.title, options)
   );
 });
 
-// Handle notification clicks
+// Tapping the notification opens the relevant page
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
+  const targetUrl = event.notification.data?.url || '/';
+
   event.waitUntil(
-    clients.openWindow('/')
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(windowClients => {
+      for (const client of windowClients) {
+        if (client.url.includes(targetUrl) && 'focus' in client) {
+          return client.focus();
+        }
+      }
+      return self.clients.openWindow(targetUrl);
+    })
   );
 });
 

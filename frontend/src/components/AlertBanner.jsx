@@ -1,6 +1,19 @@
 import { Link } from 'react-router-dom';
-import { TrendingDown, X } from 'lucide-react';
+import { TrendingDown, Check } from 'lucide-react';
 import './AlertBanner.css';
+
+function formatAlertDate(dateStr) {
+  if (!dateStr) return '';
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diffMs = now - date;
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffDays === 0) return 'Today';
+  if (diffDays === 1) return 'Yesterday';
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+}
 
 export default function AlertBanner({ alert, apiBase, onDismiss }) {
   const savings = (alert.old_price - alert.new_price).toFixed(2);
@@ -25,9 +38,14 @@ export default function AlertBanner({ alert, apiBase, onDismiss }) {
       </div>
       
       <div className="alert-content">
-        <p className="alert-title">
-          <strong>{alert.item_name}</strong> dropped {percentDrop}%!
-        </p>
+        <div className="alert-top-row">
+          <p className="alert-title">
+            <strong>{alert.item_name}</strong> dropped {percentDrop}%!
+          </p>
+          {alert.created_at && (
+            <span className="alert-date">{formatAlertDate(alert.created_at)}</span>
+          )}
+        </div>
         <p className="alert-prices">
           <span className="old-price">£{alert.old_price.toFixed(2)}</span>
           <span className="arrow">→</span>
@@ -41,7 +59,7 @@ export default function AlertBanner({ alert, apiBase, onDismiss }) {
         onClick={handleDismiss}
         title="Dismiss"
       >
-        <X size={16} />
+        <Check size={16} />
       </button>
     </Link>
   );

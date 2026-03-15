@@ -13,7 +13,7 @@
 .chart-tooltip {
   background: var(--bg-card);
   border: var(--border-width) solid var(--pixel-outline);
-  border-radius: var(--border-radius-sm);
+  border-radius: var(--border-radius-md);
   padding: var(--space-sm) var(--space-md);
   box-shadow: var(--shadow-pixel);
   font-family: var(--font-pixel);

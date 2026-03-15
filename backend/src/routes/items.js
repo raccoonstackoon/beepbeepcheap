@@ -311,6 +311,14 @@ router.post('/manual', (req, res) => {
     if (!name) {
       return res.status(400).json({ error: 'Item name is required' });
     }
+
+    // Validate price is a reasonable number
+    if (current_price != null) {
+      const priceNum = parseFloat(current_price);
+      if (isNaN(priceNum) || priceNum < 0 || priceNum > 1000000) {
+        return res.status(400).json({ error: 'Invalid price value' });
+      }
+    }
     
     // Fix image URL issues
     let finalImageUrl = image_url || null;
