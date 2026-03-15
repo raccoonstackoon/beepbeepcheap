@@ -4,7 +4,7 @@
   "description": "Track prices and never miss a deal. Honk if you love savings!",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#E8F4F8",
+  "background_color": "#FFFFFF",
   "theme_color": "#4ECDC4",
   "orientation": "portrait-primary",
   "categories": ["shopping", "finance"],
