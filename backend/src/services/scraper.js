@@ -1980,31 +1980,44 @@ export async function searchDuckDuckGoShopping(searchQuery) {
     // Extract shopping results from LI elements (DuckDuckGo's actual structure)
     const results = await page.evaluate(() => {
       const items = [];
+      const currencySymbols = ['£', '€', '$'];
+      const priceRegex = /([£€$])([\d,]+\.\d{2})/;
+      const krPriceRegex = /([\d,]+\.\d{2})\s*kr/i;
       
-      // Find all LI elements that contain price patterns
       const allLis = document.querySelectorAll('li');
       
       for (const li of allLis) {
         try {
           const text = li.innerText || '';
           
-          // Must have a price (£X.XX or £X,XXX.XX pattern)
-          const priceMatch = text.match(/£([\d,]+\.\d{2})/);
-          if (!priceMatch) continue;
+          // Must have a price in any supported currency
+          let priceMatch = text.match(priceRegex);
+          let currency = '£';
+          let priceValue = null;
+          
+          if (priceMatch) {
+            currency = priceMatch[1];
+            priceValue = priceMatch[2];
+          } else {
+            const krMatch = text.match(krPriceRegex);
+            if (krMatch) {
+              currency = 'kr';
+              priceValue = krMatch[1];
+            }
+          }
+          if (!priceValue) continue;
           
           // Skip filter/menu items
           if (text.length < 30) continue;
-          if (text.includes('Up to £') || text.includes('Price -') || text.includes('Low To High')) continue;
+          if (/Up to [£€$]/.test(text) || text.includes('Price -') || text.includes('Low To High')) continue;
           
           // Find the link inside
           const link = li.querySelector('a');
           let href = link?.getAttribute('href') || '';
           
-          // Skip if no link
           if (!href) continue;
           
-          // DuckDuckGo uses tracking URLs - try to extract the actual URL
-          // Format: //links.duckduckgo.com/d.js?uddg=https%3A%2F%2Fwww.ebay.co.uk%2F...
+          // DuckDuckGo uses tracking URLs - extract the actual URL
           if (href.includes('duckduckgo.com') || href.includes('uddg=')) {
             try {
               const uddgMatch = href.match(/uddg=([^&]+)/);
@@ -2016,27 +2029,23 @@ export async function searchDuckDuckGoShopping(searchQuery) {
           
           // ═══════════════════════════════════════════════════════════════════
           // DYNAMIC STORE NAME EXTRACTION
-          // DuckDuckGo format: "[Free shipping] Product Title £price [£was] Store Name"
           // Store name is typically the LAST segment after all prices
           // ═══════════════════════════════════════════════════════════════════
           
-          // Find all prices in the text
-          const allPrices = text.match(/£[\d,]+\.?\d*/g) || [];
+          const allPrices = text.match(/[£€$][\d,]+\.?\d*|\d[\d,]*\.?\d*\s*kr/gi) || [];
           
-          // Get text after the last price - this often contains the store name
           let storeName = '';
           if (allPrices.length > 0) {
             const lastPrice = allPrices[allPrices.length - 1];
             const lastPriceIndex = text.lastIndexOf(lastPrice);
             const afterPrice = text.substring(lastPriceIndex + lastPrice.length).trim();
             
-            // Clean up the store name - remove newlines, take first meaningful segment
             const storeCandidate = afterPrice.split('\n')[0].trim();
             
-            // Validate: store name should be 2-50 chars, not a price, not common junk
+            const looksLikePrice = currencySymbols.some(s => storeCandidate.startsWith(s));
             if (storeCandidate.length >= 2 && 
                 storeCandidate.length <= 50 && 
-                !storeCandidate.startsWith('£') &&
+                !looksLikePrice &&
                 !storeCandidate.match(/^\d+$/) &&
                 !storeCandidate.toLowerCase().includes('free shipping') &&
                 !storeCandidate.toLowerCase().includes('add to') &&
@@ -2045,14 +2054,14 @@ export async function searchDuckDuckGoShopping(searchQuery) {
             }
           }
           
-          // Fallback: check the last line of text
           if (!storeName) {
             const lines = text.split('\n').filter(l => l.trim().length > 0);
             if (lines.length > 1) {
               const lastLine = lines[lines.length - 1].trim();
+              const looksLikePrice = currencySymbols.some(s => lastLine.startsWith(s));
               if (lastLine.length >= 2 && 
                   lastLine.length <= 50 && 
-                  !lastLine.startsWith('£') &&
+                  !looksLikePrice &&
                   !lastLine.match(/^\d+$/)) {
                 storeName = lastLine;
               }
@@ -2061,7 +2070,6 @@ export async function searchDuckDuckGoShopping(searchQuery) {
           
           // ═══════════════════════════════════════════════════════════════════
           // EXTRACT PRODUCT TITLE
-          // Title is usually the longest text segment before the price
           // ═══════════════════════════════════════════════════════════════════
           
           const lines = text.split('\n').filter(l => l.trim().length > 0);
@@ -2070,25 +2078,22 @@ export async function searchDuckDuckGoShopping(searchQuery) {
           for (const line of lines) {
             let trimmed = line.trim();
             
-            // Remove "Free shipping" prefix but keep the rest
             if (trimmed.toLowerCase().startsWith('free shipping')) {
               trimmed = trimmed.substring(13).trim();
             } else if (trimmed.toLowerCase().startsWith('freeshipping')) {
               trimmed = trimmed.substring(12).trim();
             }
             
-            // Skip price lines, very short lines, and the store name line
-            if (trimmed.startsWith('£') || trimmed.length < 10) continue;
+            const startsWithPrice = currencySymbols.some(s => trimmed.startsWith(s));
+            if (startsWithPrice || trimmed.length < 10) continue;
             if (storeName && trimmed === storeName) continue;
             
-            // This looks like a product title
             if (trimmed.length > 15) {
               title = trimmed;
               break;
             }
           }
           
-          // Fallback: use first meaningful line
           if (!title && lines.length > 0) {
             let firstLine = lines[0].trim();
             if (firstLine.toLowerCase().startsWith('free shipping')) {
@@ -2097,12 +2102,11 @@ export async function searchDuckDuckGoShopping(searchQuery) {
             title = firstLine;
           }
           
-          // Clean up title - remove price and store from end if present
           if (storeName && title.endsWith(storeName)) {
             title = title.substring(0, title.length - storeName.length).trim();
           }
-          // Remove trailing prices from title
-          title = title.replace(/£\d+\.?\d*\s*£?\d*\.?\d*\s*$/, '').trim();
+          title = title.replace(/[£€$]\d+\.?\d*\s*[£€$]?\d*\.?\d*\s*$/, '').trim();
+          title = title.replace(/\d+\.?\d*\s*kr\s*$/, '').trim();
           
           // ═══════════════════════════════════════════════════════════════════
           // GET IMAGE AND PRICE
@@ -2118,10 +2122,8 @@ export async function searchDuckDuckGoShopping(searchQuery) {
             imageUrl = src;
           }
           
-          // Extract price (first price is usually the current/sale price)
-          const price = parseFloat(priceMatch[1].replace(/,/g, ''));
+          const price = parseFloat(priceValue.replace(/,/g, ''));
           
-          // Skip duplicates
           const titleStart = title.substring(0, 40).toLowerCase();
           const isDuplicate = items.some(item => 
             item.title.substring(0, 40).toLowerCase() === titleStart && 
@@ -2132,6 +2134,7 @@ export async function searchDuckDuckGoShopping(searchQuery) {
           items.push({
             title: title.substring(0, 200),
             price,
+            currency,
             storeName: storeName || 'Unknown',
             productUrl: href,
             imageUrl
@@ -2139,8 +2142,13 @@ export async function searchDuckDuckGoShopping(searchQuery) {
         } catch (e) {}
       }
       
-      // Sort by price (cheapest first)
-      items.sort((a, b) => a.price - b.price);
+      // GBP first (sorted by price), then non-GBP (sorted by price)
+      items.sort((a, b) => {
+        const aIsGBP = a.currency === '£' ? 0 : 1;
+        const bIsGBP = b.currency === '£' ? 0 : 1;
+        if (aIsGBP !== bIsGBP) return aIsGBP - bIsGBP;
+        return a.price - b.price;
+      });
       
       return items;
     });
@@ -2149,7 +2157,7 @@ export async function searchDuckDuckGoShopping(searchQuery) {
     
     console.log(`📊 Found ${results.length} shopping results`);
     for (const r of results.slice(0, 5)) {
-      console.log(`   £${r.price?.toFixed(2)} - ${r.storeName} - ${r.title?.substring(0, 50)}...`);
+      console.log(`   ${r.currency || '£'}${r.price?.toFixed(2)} - ${r.storeName} - ${r.title?.substring(0, 50)}...`);
     }
     
     return {

@@ -802,7 +802,14 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
                     <div className="option-meta">
                       <span className="option-store">{option.storeName}</span>
                       {option.price && (
-                        <span className="option-price">£{option.price.toFixed(2)}</span>
+                        <span className="option-price">
+                          {option.currency || '£'}{option.price.toFixed(2)}
+                          {option.currency && option.currency !== '£' && (
+                            <span className="currency-label">
+                              {' '}{({ '€': 'EUR', '$': 'USD', 'kr': 'SEK' })[option.currency] || ''}
+                            </span>
+                          )}
+                        </span>
                       )}
                     </div>
                   </div>
