@@ -2223,171 +2223,159 @@ export async function searchGoogleShopping(searchQuery, preferredStore = null) {
     
     const page = await browser.newPage();
     await page.setViewport({ width: 1920, height: 1080 });
-    await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36');
+    await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36');
     
-    // Go to Google Shopping
-    const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(searchQuery)}&tbm=shop&hl=en`;
+    const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(searchQuery)}&tbm=shop&hl=en&gl=uk`;
     console.log(`📍 Google Shopping URL: ${searchUrl}`);
     
     await page.goto(searchUrl, {
-      waitUntil: 'networkidle2',
-      timeout: 30000
+      waitUntil: 'domcontentloaded',
+      timeout: 15000
     });
     
-    // Wait for results to load
-    await new Promise(resolve => setTimeout(resolve, 3000));
+    // Short wait — DOM is loaded, just let JS render results
+    await new Promise(resolve => setTimeout(resolve, 2000));
     
-    // Handle cookie consent if present
+    // Handle cookie consent if present (EU/UK)
     try {
-      const acceptBtn = await page.$('button[id*="accept"], [aria-label*="Accept"], button:has-text("Accept all")');
-      if (acceptBtn) {
-        await acceptBtn.click();
-        await new Promise(resolve => setTimeout(resolve, 1000));
-      }
-    } catch (e) {}
-    
-    // Extract shopping results
-    const results = await page.evaluate((preferredStore) => {
-      const items = [];
-      
-      // Google Shopping result selectors (they change frequently, so try multiple)
-      const resultSelectors = [
-        '.sh-dgr__gr-auto', // Grid items
-        '.sh-dlr__list-result', // List items
-        '[data-docid]', // Items with doc ID
-        '.sh-pr__product-results-grid > div', // Product grid
-        '.KZmu8e', // Another common class
+      const consentSelectors = [
+        'button[id="L2AGLb"]',
+        'button[aria-label*="Accept"]',
+        '[aria-label="Accept all"]',
       ];
-      
-      let resultElements = [];
-      for (const selector of resultSelectors) {
-        const els = document.querySelectorAll(selector);
-        if (els.length > 0) {
-          resultElements = els;
+      for (const sel of consentSelectors) {
+        const btn = await page.$(sel);
+        if (btn) {
+          await btn.click();
+          await new Promise(resolve => setTimeout(resolve, 1000));
           break;
         }
       }
+    } catch (e) {}
+    
+    // Debug page state
+    const pageTitle = await page.title();
+    console.log(`   Page title: ${pageTitle}`);
+    
+    // Extract shopping results — normalised to the same shape the search route expects
+    const results = await page.evaluate(() => {
+      const items = [];
+      const priceRegex = /([£€$])\s*([\d,]+\.?\d*)/;
+
+      // Google Shopping result selectors (try multiple — Google changes these)
+      const selectorGroups = [
+        '.sh-dgr__gr-auto',
+        '.sh-dlr__list-result',
+        '[data-docid]',
+        '.sh-pr__product-results-grid > div',
+        '.KZmu8e',
+        '.i0X6df',
+        '.xcR77',
+      ];
       
-      // If no structured results, try to find any shopping links
+      let resultElements = [];
+      for (const selector of selectorGroups) {
+        const els = document.querySelectorAll(selector);
+        if (els.length > 2) { resultElements = els; break; }
+      }
+      
+      // Broader fallback — any element containing a price + a link
       if (resultElements.length === 0) {
-        resultElements = document.querySelectorAll('a[href*="shopping/product"], a[href*="url?q="]');
+        resultElements = document.querySelectorAll('[data-docid], [data-offer-id]');
       }
       
       for (const el of resultElements) {
         try {
-          // Try to extract product info
+          const text = el.innerText || '';
+          const match = text.match(priceRegex);
+          if (!match) continue;
+          
+          const currency = match[1];
+          const price = parseFloat(match[2].replace(/,/g, ''));
+          if (!price || price <= 0) continue;
+          
+          // Title — first heading or longest text line
           let title = '';
-          let price = null;
-          let store = '';
-          let link = '';
-          let imageUrl = '';
+          const heading = el.querySelector('h3, h4, [role="heading"]');
+          if (heading) { title = heading.textContent.trim(); }
+          if (!title) {
+            const lines = text.split('\n').filter(l => l.trim().length > 15);
+            title = lines[0]?.trim() || '';
+          }
+          if (!title) continue;
           
-          // Title
-          const titleEl = el.querySelector('h3, h4, [class*="title"], [class*="name"], .tAxDx, .Xjkr3b');
-          if (titleEl) title = titleEl.textContent.trim();
-          
-          // Price
-          const priceEl = el.querySelector('[class*="price"], .a8Pemb, .kHxwFf, span[aria-label*="price"]');
-          if (priceEl) {
-            const priceText = priceEl.textContent;
-            const priceMatch = priceText.match(/[£$€]?\s*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/);
-            if (priceMatch) {
-              price = parseFloat(priceMatch[1].replace(/,/g, ''));
+          // Store name — small text near the price area
+          let storeName = '';
+          const storeEls = el.querySelectorAll('span, div');
+          for (const s of storeEls) {
+            const t = s.textContent.trim();
+            if (t.length >= 3 && t.length <= 40 &&
+                !priceRegex.test(t) && t !== title &&
+                !t.includes('FREE') && !t.includes('free') &&
+                !t.startsWith('£') && !t.startsWith('$') && !t.startsWith('€')) {
+              // Heuristic: store name is usually a short span near the end
+              const parentText = s.parentElement?.innerText || '';
+              if (parentText.includes(match[0])) {
+                storeName = t;
+              }
             }
           }
           
-          // Store name
-          const storeEl = el.querySelector('[class*="merchant"], [class*="store"], .aULzUe, .IuHnof');
-          if (storeEl) store = storeEl.textContent.trim();
-          
-          // Link - try to find the actual product URL
-          const linkEl = el.querySelector('a[href*="url?q="], a[href*="shopping/product"], a[href]');
+          // Link
+          let productUrl = '';
+          const linkEl = el.querySelector('a[href]');
           if (linkEl) {
-            let href = linkEl.getAttribute('href');
-            
-            // Google wraps URLs - extract the actual URL
-            if (href.includes('url?q=')) {
-              const urlMatch = href.match(/url\?q=([^&]+)/);
-              if (urlMatch) {
-                href = decodeURIComponent(urlMatch[1]);
-              }
+            let href = linkEl.getAttribute('href') || '';
+            if (href.includes('url?q=') || href.includes('adurl=')) {
+              const urlMatch = href.match(/(?:url\?q=|adurl=)([^&]+)/);
+              if (urlMatch) href = decodeURIComponent(urlMatch[1]);
             }
-            
-            // Skip Google's own URLs
-            if (!href.includes('google.com')) {
-              link = href;
-            }
+            if (!href.startsWith('http')) href = 'https://www.google.com' + href;
+            productUrl = href;
           }
           
           // Image
-          const imgEl = el.querySelector('img[src*="http"]');
-          if (imgEl) imageUrl = imgEl.getAttribute('src');
+          let imageUrl = null;
+          const img = el.querySelector('img[src*="http"]');
+          if (img) imageUrl = img.getAttribute('src');
           
-          if (title && (link || price)) {
-            items.push({ title, price, store, link, imageUrl });
-          }
+          // Deduplicate by title prefix
+          const titleKey = title.substring(0, 40).toLowerCase();
+          if (items.some(i => i.title.substring(0, 40).toLowerCase() === titleKey && Math.abs(i.price - price) < 1)) continue;
+          
+          items.push({
+            title: title.substring(0, 200),
+            price,
+            currency,
+            storeName: storeName || 'Unknown',
+            productUrl,
+            imageUrl,
+          });
         } catch (e) {}
       }
       
-      // Sort by price (cheapest first)
-      items.sort((a, b) => {
-        if (a.price === null) return 1;
-        if (b.price === null) return -1;
-        return a.price - b.price;
-      });
-      
-      // If preferred store specified, try to find it
-      if (preferredStore) {
-        const preferredItem = items.find(item => 
-          item.store.toLowerCase().includes(preferredStore.toLowerCase())
-        );
-        if (preferredItem) {
-          return { best: preferredItem, all: items };
-        }
-      }
-      
-      return { best: items[0] || null, all: items };
-    }, preferredStore);
+      items.sort((a, b) => a.price - b.price);
+      return items;
+    });
     
     await browser.close();
     
-    if (results.best && results.best.link) {
-      console.log(`✅ Found on Google Shopping:`);
-      console.log(`   Product: ${results.best.title}`);
-      console.log(`   Price: £${results.best.price}`);
-      console.log(`   Store: ${results.best.store}`);
-      console.log(`   URL: ${results.best.link}`);
-      
-      return {
-        success: true,
-        productUrl: results.best.link,
-        productName: results.best.title,
-        price: results.best.price,
-        storeName: results.best.store,
-        imageUrl: results.best.imageUrl,
-        allResults: results.all,
-        searchUrl
-      };
-    } else {
-      console.log(`❌ No products found on Google Shopping`);
-      return {
-        success: false,
-        error: 'No products found on Google Shopping',
-        searchUrl,
-        allResults: results.all || []
-      };
+    console.log(`📊 Found ${results.length} Google Shopping results`);
+    for (const r of results.slice(0, 5)) {
+      console.log(`   ${r.currency}${r.price?.toFixed(2)} - ${r.storeName} - ${r.title?.substring(0, 50)}...`);
     }
+    
+    return {
+      success: results.length > 0,
+      results,
+      allResults: results,
+      searchUrl,
+    };
     
   } catch (error) {
-    if (browser) {
-      await browser.close();
-    }
-    
+    if (browser) await browser.close();
     console.error('❌ Google Shopping search error:', error.message);
-    return {
-      success: false,
-      error: error.message
-    };
+    return { success: false, error: error.message, results: [] };
   }
 }
 

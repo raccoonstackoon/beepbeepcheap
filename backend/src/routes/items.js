@@ -3,7 +3,7 @@ import multer from 'multer';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import * as queries from '../database/queries.js';
-import { scrapeProduct, scrapePrice, searchDuckDuckGoShopping, searchCostco, getStoreName } from '../services/scraper.js';
+import { scrapeProduct, scrapePrice, searchDuckDuckGoShopping, searchGoogleShopping, searchCostco, getStoreName } from '../services/scraper.js';
 import { processImage } from '../services/imageProcessor.js';
 
 const router = express.Router();
@@ -209,11 +209,18 @@ router.post('/image', upload.single('image'), async (req, res) => {
       }
     }
     
-    console.log(`🛒 Searching DuckDuckGo Shopping for: "${searchQuery}"`);
+    console.log(`🛒 Searching Google Shopping for: "${searchQuery}"`);
     
-    const shoppingResults = await searchDuckDuckGoShopping(searchQuery);
+    let shoppingResults = await searchGoogleShopping(searchQuery);
+    let searchMethod = 'google_shopping';
+
+    if (!shoppingResults.results || shoppingResults.results.length === 0) {
+      console.log(`   ↩️ Google Shopping returned 0 results, trying DuckDuckGo...`);
+      shoppingResults = await searchDuckDuckGoShopping(searchQuery);
+      searchMethod = 'duckduckgo_shopping';
+    }
     
-    console.log(`📊 Found ${shoppingResults.results?.length || 0} shopping results`);
+    console.log(`📊 Found ${shoppingResults.results?.length || 0} shopping results via ${searchMethod}`);
     
     // Filter results to ONLY show items from the specified store (if brand provided)
     let filteredResults = shoppingResults.results || [];
@@ -225,35 +232,28 @@ router.post('/image', upload.single('image'), async (req, res) => {
       filteredResults = filteredResults.filter(r => {
         const storeLower = (r.storeName || '').toLowerCase();
         const titleLower = (r.title || '').toLowerCase();
-        // Match if store name or product title contains the brand
         return storeLower.includes(brandLower) || titleLower.includes(brandLower);
       });
       
       console.log(`🏪 Filtered to "${brandName}" only: ${filteredResults.length} of ${beforeCount} results`);
     }
     
-    // Get top 3 cheapest (already sorted by price in the scraper)
     const topResults = filteredResults.slice(0, 3);
     
     for (const r of topResults) {
-      console.log(`   💰 £${r.price || 'N/A'} - ${r.title?.substring(0, 50)}... (${r.storeName})`);
+      console.log(`   💰 ${r.currency || '£'}${r.price || 'N/A'} - ${r.title?.substring(0, 50)}... (${r.storeName})`);
     }
     
-    // ═══════════════════════════════════════════════════════════════════════
-    // STEP 4: Return TOP 3 results for user to choose from
-    // ═══════════════════════════════════════════════════════════════════════
     res.json({
       extracted: { 
         ...result, 
         brand: brandName || detectedBrand 
       },
       localImageUrl: imageUrl,
-      // Return the top 3 cheapest options for user to choose
       shoppingOptions: topResults,
-      // Also include search metadata
       searchQuery: searchQuery,
       totalResultsFound: shoppingResults.results?.length || 0,
-      searchMethod: 'duckduckgo_shopping'
+      searchMethod,
     });
     
   } catch (error) {
@@ -274,7 +274,16 @@ router.post('/search', async (req, res) => {
     const searchQuery = query.trim();
     console.log(`🔎 Text search for: "${searchQuery}"`);
 
-    const shoppingResults = await searchDuckDuckGoShopping(searchQuery);
+    // Try Google Shopping first; fall back to DuckDuckGo if it returns nothing
+    let shoppingResults = await searchGoogleShopping(searchQuery);
+    let searchMethod = 'google_shopping';
+
+    if (!shoppingResults.results || shoppingResults.results.length === 0) {
+      console.log(`   ↩️ Google Shopping returned 0 results, trying DuckDuckGo...`);
+      shoppingResults = await searchDuckDuckGoShopping(searchQuery);
+      searchMethod = 'duckduckgo_shopping';
+    }
+
     const allResults = shoppingResults.results || [];
 
     // Split search words into identity words (product/brand name) vs spec words (sizes, dimensions)
@@ -352,7 +361,7 @@ router.post('/search', async (req, res) => {
       backupResults,
       searchQuery,
       totalResultsFound: allResults.length,
-      searchMethod: 'duckduckgo_shopping'
+      searchMethod,
     });
   } catch (error) {
     console.error('Error searching products:', error);
