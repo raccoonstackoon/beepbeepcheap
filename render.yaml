@@ -1,14 +1,13 @@
 services:
   - type: web
     name: beepbeep-api
-    runtime: docker
-    dockerfilePath: ./Dockerfile
+    runtime: node
+    buildCommand: npm install && cd backend && npx puppeteer browsers install chrome && cd .. && npm run build
+    startCommand: npm start
     envVars:
       - key: NODE_ENV
         value: production
       - key: FRONTEND_URL
         value: https://beepbeep-api.onrender.com
-      - key: PUPPETEER_EXECUTABLE_PATH
-        value: /usr/bin/chromium
       - key: ANTHROPIC_API_KEY
         sync: false
