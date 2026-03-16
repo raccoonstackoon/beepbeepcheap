@@ -1,12 +1,14 @@
 import puppeteer from 'puppeteer-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import fs from 'fs';
+import { execSync } from 'child_process';
 
 puppeteer.use(StealthPlugin());
 
 /**
  * Find a working Chrome/Chromium executable.
- * Priority: env var → common system paths → puppeteer's bundled Chrome (local dev)
+ * Checks env var, system paths, then tries puppeteer's bundled Chrome.
+ * If nothing found, attempts to install Chrome automatically.
  */
 function findChromePath() {
   if (process.env.PUPPETEER_EXECUTABLE_PATH) {
@@ -25,16 +27,32 @@ function findChromePath() {
 
   for (const candidate of candidates) {
     if (fs.existsSync(candidate)) {
-      console.log(`🌐 Found Chrome at: ${candidate}`);
+      console.log(`🌐 Found system Chrome at: ${candidate}`);
       return candidate;
     }
   }
 
-  // No system Chrome found — let puppeteer use its bundled version (local dev)
+  // Try to find puppeteer's cached Chrome
+  try {
+    const result = execSync('npx puppeteer browsers install chrome 2>&1', {
+      timeout: 120_000,
+      cwd: process.cwd(),
+    }).toString();
+    console.log(`🌐 Puppeteer Chrome install output:\n${result}`);
+  } catch (e) {
+    console.warn(`⚠️ Could not install Chrome via puppeteer: ${e.message}`);
+  }
+
+  // After install attempt, let puppeteer resolve its own Chrome
   return undefined;
 }
 
 const resolvedChromePath = findChromePath();
+if (resolvedChromePath) {
+  console.log(`🌐 Using Chrome at: ${resolvedChromePath}`);
+} else {
+  console.log(`🌐 No explicit Chrome path — puppeteer will use its cached browser`);
+}
 
 const BROWSER_LAUNCH_OPTIONS = {
   headless: true,

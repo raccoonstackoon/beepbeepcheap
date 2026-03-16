@@ -106,6 +106,7 @@ app.use('/api/push', pushRouter);
 // Health check with environment diagnostics
 app.get('/api/health', async (req, res) => {
   const fs = await import('fs');
+  const { execSync } = await import('child_process');
 
   const chromePaths = [
     process.env.PUPPETEER_EXECUTABLE_PATH,
@@ -120,15 +121,30 @@ app.get('/api/health', async (req, res) => {
     chromeStatus[p] = fs.existsSync(p);
   }
 
+  let puppeteerCacheContents = '(unknown)';
+  const cacheDir = path.join(process.env.HOME || '/tmp', '.cache', 'puppeteer');
+  try {
+    if (fs.existsSync(cacheDir)) {
+      puppeteerCacheContents = execSync(`ls -la "${cacheDir}" 2>&1`).toString().trim();
+    } else {
+      puppeteerCacheContents = `(dir not found: ${cacheDir})`;
+    }
+  } catch (e) {
+    puppeteerCacheContents = e.message;
+  }
+
   res.json({
     status: 'ok',
     timestamp: new Date().toISOString(),
     env: {
       NODE_ENV: process.env.NODE_ENV,
+      HOME: process.env.HOME,
       PUPPETEER_EXECUTABLE_PATH: process.env.PUPPETEER_EXECUTABLE_PATH || '(not set)',
       PUPPETEER_SKIP_DOWNLOAD: process.env.PUPPETEER_SKIP_DOWNLOAD || '(not set)',
+      PUPPETEER_CACHE_DIR: process.env.PUPPETEER_CACHE_DIR || '(not set)',
     },
     chrome: chromeStatus,
+    puppeteerCache: puppeteerCacheContents,
   });
 });
 

@@ -12,6 +12,16 @@ import {
 import './AddItemModal.css';
 import ImageAnnotator from './ImageAnnotator';
 
+async function safeJson(res) {
+  const text = await res.text();
+  if (!text) throw new Error('Server returned an empty response — it may be starting up. Please try again in a moment.');
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error('Server returned an unexpected response. Please try again.');
+  }
+}
+
 export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode }) {
   const mappedMode = initialMode === 'search' ? 'url' : initialMode;
   const [mode, setMode] = useState(mappedMode || null);
@@ -90,7 +100,7 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
         body: JSON.stringify({ url: inputValue.trim() })
       });
       
-      const data = await res.json();
+      const data = await safeJson(res);
       
       if (!res.ok) {
         throw new Error(data.error || 'Failed to add item');
@@ -121,7 +131,7 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
         body: JSON.stringify({ query: inputValue.trim() })
       });
       
-      const data = await res.json();
+      const data = await safeJson(res);
       
       if (!res.ok) {
         throw new Error(data.error || 'Failed to search');
@@ -219,7 +229,7 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
         body: formData
       });
       
-      const data = await res.json();
+      const data = await safeJson(res);
       
       if (!res.ok) {
         throw new Error(data.error || 'Failed to process image');
@@ -284,7 +294,7 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
         body: formData
       });
       
-      const data = await res.json();
+      const data = await safeJson(res);
       
       if (!res.ok) {
         throw new Error(data.error || 'Failed to search');
@@ -410,7 +420,7 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
       });
       
       if (!res.ok) {
-        const data = await res.json();
+        const data = await safeJson(res);
         throw new Error(data.error || 'Failed to save item');
       }
       
@@ -479,7 +489,7 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
         })
       });
       
-      const data = await res.json();
+      const data = await safeJson(res);
       
       if (!res.ok) {
         throw new Error(data.error || 'Failed to save item');

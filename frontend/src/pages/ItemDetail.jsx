@@ -20,6 +20,12 @@ import {
 import PriceChart from '../components/PriceChart';
 import './ItemDetail.css';
 
+async function safeJson(res) {
+  const text = await res.text();
+  if (!text) throw new Error('Server returned an empty response — please try again.');
+  try { return JSON.parse(text); } catch { throw new Error('Server returned an unexpected response.'); }
+}
+
 export default function ItemDetail({ apiBase, onRefresh }) {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -51,8 +57,8 @@ export default function ItemDetail({ apiBase, onRefresh }) {
           fetch(`${apiBase}/items/${id}`),
           fetch(`${apiBase}/items/${id}/history`)
         ]);
-        const itemData = await itemRes.json();
-        const historyData = await historyRes.json();
+        const itemData = await safeJson(itemRes);
+        const historyData = await safeJson(historyRes);
         setItem(itemData);
         setHistory(historyData);
       } catch (error) {
@@ -67,12 +73,12 @@ export default function ItemDetail({ apiBase, onRefresh }) {
     setRefreshing(true);
     try {
       const res = await fetch(`${apiBase}/items/${id}/refresh`, { method: 'POST' });
-      const updatedItem = await res.json();
+      const updatedItem = await safeJson(res);
       setItem(updatedItem);
       
       // Refetch history
       const historyRes = await fetch(`${apiBase}/items/${id}/history`);
-      const historyData = await historyRes.json();
+      const historyData = await safeJson(historyRes);
       setHistory(historyData);
       
       onRefresh();
@@ -102,7 +108,7 @@ export default function ItemDetail({ apiBase, onRefresh }) {
     
     try {
       const res = await fetch(`${apiBase}/items/${id}/alternatives`);
-      const data = await res.json();
+      const data = await safeJson(res);
       
       if (!res.ok) {
         throw new Error(data.error || 'Failed to search');
@@ -202,7 +208,7 @@ export default function ItemDetail({ apiBase, onRefresh }) {
         throw new Error('Failed to add item');
       }
       
-      const newItem = await addRes.json();
+      const newItem = await safeJson(addRes);
       
       // Then, delete the current item
       const deleteRes = await fetch(`${apiBase}/items/${id}`, {
