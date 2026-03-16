@@ -1978,8 +1978,8 @@ export async function searchShoppingSerpAPI(searchQuery) {
   const apiKey = process.env.SERPAPI_KEY;
 
   if (!apiKey) {
-    console.warn('⚠️ SERPAPI_KEY not set — falling back to HTTP shopping search');
-    return searchShoppingHTTP(searchQuery);
+    console.warn('⚠️ SERPAPI_KEY not set — falling back to DuckDuckGo Puppeteer scraper');
+    return searchDuckDuckGoShopping(searchQuery);
   }
 
   try {
@@ -2006,7 +2006,7 @@ export async function searchShoppingSerpAPI(searchQuery) {
     const data = await response.json();
     const shoppingResults = data.shopping_results || [];
 
-    const results = shoppingResults
+    const serpResults = shoppingResults
       .map(item => {
         const price = item.extracted_price ?? null;
         if (!price || price <= 0) return null;
@@ -2020,12 +2020,39 @@ export async function searchShoppingSerpAPI(searchQuery) {
           imageUrl: item.thumbnail || null,
         };
       })
-      .filter(Boolean)
-      .sort((a, b) => a.price - b.price);
+      .filter(Boolean);
 
-    console.log(`📊 SerpAPI returned ${results.length} shopping results`);
-    for (const r of results.slice(0, 5)) {
+    console.log(`📊 SerpAPI returned ${serpResults.length} shopping results`);
+    for (const r of serpResults.slice(0, 5)) {
       console.log(`   £${r.price?.toFixed(2)} - ${r.storeName} - ${r.title?.substring(0, 50)}...`);
+    }
+
+    // If SerpAPI returned few results, also try DuckDuckGo for niche products
+    // (Google Shopping doesn't index every store — DDG sometimes finds extras)
+    let ddgResults = [];
+    if (serpResults.length < 10) {
+      console.log(`   🔄 SerpAPI returned < 10 results — supplementing with DuckDuckGo...`);
+      try {
+        const ddg = await searchDuckDuckGoShopping(searchQuery);
+        ddgResults = ddg.results || [];
+        console.log(`   📊 DuckDuckGo added ${ddgResults.length} extra results`);
+      } catch (e) {
+        console.log(`   ⚠️ DuckDuckGo supplement failed: ${e.message}`);
+      }
+    }
+
+    // Merge and deduplicate (prefer SerpAPI entries when titles overlap)
+    const seen = new Set(
+      serpResults.map(r => r.title.substring(0, 40).toLowerCase())
+    );
+    const extras = ddgResults.filter(
+      r => !seen.has((r.title || '').substring(0, 40).toLowerCase())
+    );
+
+    const results = [...serpResults, ...extras].sort((a, b) => a.price - b.price);
+
+    if (extras.length > 0) {
+      console.log(`   ✅ Merged total: ${results.length} unique results (${serpResults.length} SerpAPI + ${extras.length} DDG)`);
     }
 
     return {
@@ -2035,8 +2062,8 @@ export async function searchShoppingSerpAPI(searchQuery) {
     };
   } catch (error) {
     console.error('❌ SerpAPI search error:', error.message);
-    console.log('   ↩️ Falling back to HTTP shopping search...');
-    return searchShoppingHTTP(searchQuery);
+    console.log('   ↩️ Falling back to DuckDuckGo Puppeteer scraper...');
+    return searchDuckDuckGoShopping(searchQuery);
   }
 }
 
