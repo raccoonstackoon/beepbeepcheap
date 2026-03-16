@@ -11,3 +11,5 @@ services:
         value: https://beepbeep-api.onrender.com
       - key: ANTHROPIC_API_KEY
         sync: false
+      - key: SERPAPI_KEY
+        sync: false

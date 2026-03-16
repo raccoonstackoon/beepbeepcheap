@@ -1968,6 +1968,79 @@ export async function searchWithBrand(imagePath, brandName) {
 }
 
 /**
+ * Search Google Shopping via SerpAPI (reliable API — no browser/CAPTCHA issues).
+ * Falls back to Puppeteer-based DuckDuckGo scraping if SERPAPI_KEY is not set.
+ *
+ * @param {string} searchQuery - Product name/description to search for
+ * @returns {object} - { success, results: [{ title, price, currency, storeName, productUrl, imageUrl }] }
+ */
+export async function searchShoppingSerpAPI(searchQuery) {
+  const apiKey = process.env.SERPAPI_KEY;
+
+  if (!apiKey) {
+    console.warn('⚠️ SERPAPI_KEY not set — falling back to HTTP shopping search');
+    return searchShoppingHTTP(searchQuery);
+  }
+
+  try {
+    console.log(`🛒 SerpAPI Google Shopping search for: "${searchQuery}"`);
+
+    const params = new URLSearchParams({
+      engine: 'google_shopping',
+      q: searchQuery,
+      api_key: apiKey,
+      hl: 'en',
+      gl: 'uk',
+      num: '30',
+    });
+
+    const url = `https://serpapi.com/search.json?${params}`;
+    const response = await fetch(url, { signal: AbortSignal.timeout(15000) });
+
+    if (!response.ok) {
+      const body = await response.text();
+      console.error(`❌ SerpAPI error ${response.status}: ${body}`);
+      return { success: false, error: `SerpAPI ${response.status}`, results: [] };
+    }
+
+    const data = await response.json();
+    const shoppingResults = data.shopping_results || [];
+
+    const results = shoppingResults
+      .map(item => {
+        const price = item.extracted_price ?? null;
+        if (!price || price <= 0) return null;
+
+        return {
+          title: (item.title || '').substring(0, 200),
+          price,
+          currency: '£',
+          storeName: item.source || 'Unknown',
+          productUrl: item.product_link || item.link || '',
+          imageUrl: item.thumbnail || null,
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.price - b.price);
+
+    console.log(`📊 SerpAPI returned ${results.length} shopping results`);
+    for (const r of results.slice(0, 5)) {
+      console.log(`   £${r.price?.toFixed(2)} - ${r.storeName} - ${r.title?.substring(0, 50)}...`);
+    }
+
+    return {
+      success: results.length > 0,
+      results,
+      searchUrl: `https://www.google.com/search?q=${encodeURIComponent(searchQuery)}&tbm=shop&gl=uk`,
+    };
+  } catch (error) {
+    console.error('❌ SerpAPI search error:', error.message);
+    console.log('   ↩️ Falling back to HTTP shopping search...');
+    return searchShoppingHTTP(searchQuery);
+  }
+}
+
+/**
  * Search DuckDuckGo Shopping for products and return the cheapest results
  * @param {string} searchQuery - Product name/description to search for
  * @returns {object} - { success, results: [{ title, price, storeName, productUrl, imageUrl }] }
@@ -2376,6 +2449,156 @@ export async function searchGoogleShopping(searchQuery, preferredStore = null) {
     if (browser) await browser.close();
     console.error('❌ Google Shopping search error:', error.message);
     return { success: false, error: error.message, results: [] };
+  }
+}
+
+/**
+ * Lightweight shopping search using plain HTTP (no Puppeteer).
+ * Fetches Google Shopping HTML and parses results from the raw response.
+ * Much faster and works from data center IPs where headless browsers get blocked.
+ */
+export async function searchShoppingHTTP(searchQuery) {
+  try {
+    console.log(`🔍 HTTP Shopping search for: ${searchQuery}`);
+
+    const url = `https://www.google.com/search?q=${encodeURIComponent(searchQuery)}&tbm=shop&hl=en&gl=uk`;
+
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en-GB,en;q=0.9',
+      },
+    });
+
+    if (!res.ok) {
+      console.log(`   HTTP ${res.status} from Google Shopping`);
+      return { success: false, results: [], error: `HTTP ${res.status}` };
+    }
+
+    const html = await res.text();
+    console.log(`   Got ${html.length} bytes of HTML`);
+
+    const results = [];
+    const priceRegex = /([£€$])\s?([\d,]+\.?\d{0,2})/g;
+
+    // Google Shopping embeds product data in structured divs.
+    // The raw HTML contains product cards with title, price, and store info.
+    // We parse using regex patterns that match the HTML structure.
+
+    // Pattern: product titles are often in <h3> or <a> with class containing "DKkjqf" or similar
+    // Prices are in <span> tags with the currency symbol
+    // Strategy: find price blocks and extract surrounding context
+
+    // Split HTML into chunks around price occurrences
+    const priceBlocks = html.split(/class="[^"]*sh-dgr[^"]*"|class="[^"]*sh-dlr[^"]*"|<div[^>]*data-docid/);
+    
+    // Alternative: look for shopping result patterns in the HTML
+    // Google embeds product JSON in script tags sometimes
+    const jsonLdMatches = html.matchAll(/<script[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi);
+    for (const m of jsonLdMatches) {
+      try {
+        const data = JSON.parse(m[1]);
+        if (data['@type'] === 'Product' || (Array.isArray(data) && data[0]?.['@type'] === 'Product')) {
+          const products = Array.isArray(data) ? data : [data];
+          for (const p of products) {
+            const offer = p.offers || p.Offers || {};
+            const price = parseFloat(offer.price || offer.lowPrice || 0);
+            if (price > 0) {
+              results.push({
+                title: (p.name || '').substring(0, 200),
+                price,
+                currency: (offer.priceCurrency === 'GBP' ? '£' : offer.priceCurrency === 'EUR' ? '€' : '$'),
+                storeName: offer.seller?.name || 'Unknown',
+                productUrl: p.url || offer.url || '',
+                imageUrl: p.image || null,
+              });
+            }
+          }
+        }
+      } catch (e) {}
+    }
+
+    // Also try parsing the visible product cards from HTML
+    // Google Shopping cards follow a pattern: title text, price with currency, store name
+    const cardPattern = /<a[^>]*href="(\/shopping\/product\/[^"]*|\/url\?[^"]*)"[^>]*>[\s\S]*?<\/a>/gi;
+    let cardMatch;
+    while ((cardMatch = cardPattern.exec(html)) !== null) {
+      try {
+        const cardHtml = cardMatch[0];
+        
+        // Extract title from heading tags or aria-labels
+        const titleMatch = cardHtml.match(/<(?:h3|h4)[^>]*>(.*?)<\/(?:h3|h4)>/i) ||
+                          cardHtml.match(/aria-label="([^"]+)"/i);
+        const title = titleMatch ? titleMatch[1].replace(/<[^>]*>/g, '').trim() : '';
+        
+        // Extract price
+        const priceMatch = cardHtml.match(/([£€$])\s?([\d,]+\.?\d{0,2})/);
+        const price = priceMatch ? parseFloat(priceMatch[2].replace(/,/g, '')) : null;
+        const currency = priceMatch ? priceMatch[1] : '£';
+        
+        if (!title || !price || price <= 0) continue;
+        
+        // Extract URL
+        let productUrl = cardMatch[1];
+        if (productUrl.includes('/url?')) {
+          const qMatch = productUrl.match(/[?&]q=([^&]+)/);
+          if (qMatch) productUrl = decodeURIComponent(qMatch[1]);
+        }
+        if (!productUrl.startsWith('http')) productUrl = 'https://www.google.com' + productUrl;
+        
+        // Deduplicate
+        const titleKey = title.substring(0, 40).toLowerCase();
+        if (results.some(r => r.title.substring(0, 40).toLowerCase() === titleKey)) continue;
+        
+        results.push({
+          title: title.substring(0, 200),
+          price,
+          currency,
+          storeName: 'Unknown',
+          productUrl,
+          imageUrl: null,
+        });
+      } catch (e) {}
+    }
+    
+    // If no structured results, try raw text extraction — find price + text combos
+    if (results.length === 0) {
+      // Look for price + title patterns in innerText-like content (tags stripped)
+      const textContent = html.replace(/<script[\s\S]*?<\/script>/gi, '')
+                              .replace(/<style[\s\S]*?<\/style>/gi, '')
+                              .replace(/<[^>]+>/g, ' ')
+                              .replace(/\s+/g, ' ');
+      
+      const simplePricePattern = /([£€$])([\d,]+\.\d{2})\s+([A-Z][^£€$]{10,80})/g;
+      let simpleMatch;
+      while ((simpleMatch = simplePricePattern.exec(textContent)) !== null && results.length < 20) {
+        const price = parseFloat(simpleMatch[2].replace(/,/g, ''));
+        const title = simpleMatch[3].trim();
+        if (price > 0 && title.length > 10) {
+          results.push({
+            title: title.substring(0, 200),
+            price,
+            currency: simpleMatch[1],
+            storeName: 'Unknown',
+            productUrl: '',
+            imageUrl: null,
+          });
+        }
+      }
+    }
+
+    results.sort((a, b) => a.price - b.price);
+
+    console.log(`📊 HTTP search found ${results.length} results`);
+    for (const r of results.slice(0, 5)) {
+      console.log(`   ${r.currency}${r.price?.toFixed(2)} - ${r.title?.substring(0, 50)}... (${r.storeName})`);
+    }
+
+    return { success: results.length > 0, results };
+  } catch (error) {
+    console.error('❌ HTTP Shopping search error:', error.message);
+    return { success: false, results: [], error: error.message };
   }
 }
 

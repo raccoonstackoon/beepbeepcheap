@@ -3,7 +3,7 @@ import multer from 'multer';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import * as queries from '../database/queries.js';
-import { scrapeProduct, scrapePrice, searchDuckDuckGoShopping, searchGoogleShopping, searchCostco, getStoreName } from '../services/scraper.js';
+import { scrapeProduct, scrapePrice, searchShoppingSerpAPI, searchCostco, getStoreName } from '../services/scraper.js';
 import { processImage } from '../services/imageProcessor.js';
 
 const router = express.Router();
@@ -209,18 +209,11 @@ router.post('/image', upload.single('image'), async (req, res) => {
       }
     }
     
-    console.log(`🛒 Searching Google Shopping for: "${searchQuery}"`);
+    console.log(`🛒 Searching shopping for: "${searchQuery}"`);
     
-    let shoppingResults = await searchGoogleShopping(searchQuery);
-    let searchMethod = 'google_shopping';
-
-    if (!shoppingResults.results || shoppingResults.results.length === 0) {
-      console.log(`   ↩️ Google Shopping returned 0 results, trying DuckDuckGo...`);
-      shoppingResults = await searchDuckDuckGoShopping(searchQuery);
-      searchMethod = 'duckduckgo_shopping';
-    }
+    const shoppingResults = await searchShoppingSerpAPI(searchQuery);
     
-    console.log(`📊 Found ${shoppingResults.results?.length || 0} shopping results via ${searchMethod}`);
+    console.log(`📊 Found ${shoppingResults.results?.length || 0} shopping results`);
     
     // Filter results to ONLY show items from the specified store (if brand provided)
     let filteredResults = shoppingResults.results || [];
@@ -253,7 +246,7 @@ router.post('/image', upload.single('image'), async (req, res) => {
       shoppingOptions: topResults,
       searchQuery: searchQuery,
       totalResultsFound: shoppingResults.results?.length || 0,
-      searchMethod,
+      searchMethod: 'serpapi',
     });
     
   } catch (error) {
@@ -274,16 +267,7 @@ router.post('/search', async (req, res) => {
     const searchQuery = query.trim();
     console.log(`🔎 Text search for: "${searchQuery}"`);
 
-    // Try Google Shopping first; fall back to DuckDuckGo if it returns nothing
-    let shoppingResults = await searchGoogleShopping(searchQuery);
-    let searchMethod = 'google_shopping';
-
-    if (!shoppingResults.results || shoppingResults.results.length === 0) {
-      console.log(`   ↩️ Google Shopping returned 0 results, trying DuckDuckGo...`);
-      shoppingResults = await searchDuckDuckGoShopping(searchQuery);
-      searchMethod = 'duckduckgo_shopping';
-    }
-
+    const shoppingResults = await searchShoppingSerpAPI(searchQuery);
     const allResults = shoppingResults.results || [];
 
     // Split search words into identity words (product/brand name) vs spec words (sizes, dimensions)
@@ -361,7 +345,7 @@ router.post('/search', async (req, res) => {
       backupResults,
       searchQuery,
       totalResultsFound: allResults.length,
-      searchMethod,
+      searchMethod: 'serpapi',
     });
   } catch (error) {
     console.error('Error searching products:', error);
@@ -722,12 +706,12 @@ router.get('/:id/alternatives', async (req, res) => {
     console.log(`   (from: "${cleanName.substring(0, 60)}...")`);
     
     // ═══════════════════════════════════════════════════════════════════════
-    // Search DuckDuckGo Shopping (searches full name including size/model)
+    // Search Google Shopping via SerpAPI (full name including size/model)
     // ═══════════════════════════════════════════════════════════════════════
-    const shoppingResults = await searchDuckDuckGoShopping(cleanName);
+    const shoppingResults = await searchShoppingSerpAPI(cleanName);
     
     // ═══════════════════════════════════════════════════════════════════════
-    // BONUS: Search Costco UK (doesn't appear in DuckDuckGo Shopping)
+    // BONUS: Search Costco UK (doesn't appear in Google Shopping)
     // ═══════════════════════════════════════════════════════════════════════
     const costcoResults = await searchCostco(cleanName);
     
@@ -834,7 +818,7 @@ router.get('/:id/alternatives', async (req, res) => {
       // Take top 3
       .slice(0, 3);
     
-    console.log(`✅ Found ${alternatives.length} matching alternatives (filtered from ${allResults.length} results: ${shoppingResults.results?.length || 0} DDG + ${costcoResults.results?.length || 0} Costco)`);
+    console.log(`✅ Found ${alternatives.length} matching alternatives (filtered from ${allResults.length} results: ${shoppingResults.results?.length || 0} SerpAPI + ${costcoResults.results?.length || 0} Costco)`);
     
     // Check if user has the best price (cheapest of all alternatives)
     const cheapestAltPrice = alternatives.length > 0 ? alternatives[0].price : Infinity;
@@ -878,7 +862,7 @@ router.get('/:id/alternatives', async (req, res) => {
       searchQuery: cleanName,
       hasBestPrice,  // true if current price is cheapest
       sources: {
-        duckduckgo: shoppingResults.results?.length || 0,
+        serpapi: shoppingResults.results?.length || 0,
         costco: costcoResults.results?.length || 0
       }
     });

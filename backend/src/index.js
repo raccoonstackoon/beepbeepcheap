@@ -142,6 +142,8 @@ app.get('/api/health', async (req, res) => {
       PUPPETEER_EXECUTABLE_PATH: process.env.PUPPETEER_EXECUTABLE_PATH || '(not set)',
       PUPPETEER_SKIP_DOWNLOAD: process.env.PUPPETEER_SKIP_DOWNLOAD || '(not set)',
       PUPPETEER_CACHE_DIR: process.env.PUPPETEER_CACHE_DIR || '(not set)',
+      SERPAPI_KEY: process.env.SERPAPI_KEY ? '✅ set' : '❌ not set',
+      ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY ? '✅ set' : '❌ not set',
     },
     chrome: chromeStatus,
     puppeteerCache: puppeteerCacheContents,
