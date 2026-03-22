@@ -47,10 +47,12 @@ function urlBase64ToUint8Array(base64String) {
 // Register service worker for PWA support
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js')
+    navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' })
       .then((registration) => {
         console.log('🚗 beepbeep.cheap PWA ready!', registration.scope);
         subscribeToPush(registration);
+        // Pick up new sw.js soon after deploy (Safari can be lazy otherwise)
+        registration.update().catch(() => {});
       })
       .catch((error) => {
         console.log('Service worker registration failed:', error);

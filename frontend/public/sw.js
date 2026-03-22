@@ -1,6 +1,7 @@
 /* eslint-disable no-undef */
 // beepbeep.cheap Service Worker
-const CACHE_NAME = 'beepbeep-v1';
+// Bump when you need everyone to drop stale HTML / old hashed JS (e.g. UI copy updates).
+const CACHE_NAME = 'beepbeep-v2';
 const urlsToCache = [
   '/',
   '/index.html',
@@ -52,6 +53,15 @@ self.addEventListener('fetch', (event) => {
   // Skip API requests (always go to network)
   if (event.request.url.includes('/api/')) return;
 
+  // SPA / page loads: always hit network when online so users get new index.html + JS hashes.
+  // (Caching navigations caused “production never refreshed” for PWA installs.)
+  if (event.request.mode === 'navigate' || event.request.destination === 'document') {
+    event.respondWith(
+      fetch(event.request).catch(() => caches.match('/index.html'))
+    );
+    return;
+  }
+
   event.respondWith(
     fetch(event.request)
       .then((response) => {
@@ -75,7 +85,7 @@ self.addEventListener('push', (event) => {
 
   try {
     if (event.data) data = Object.assign(data, event.data.json());
-  } catch (e) {
+  } catch {
     if (event.data) data.body = event.data.text();
   }
 
