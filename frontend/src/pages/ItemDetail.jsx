@@ -599,7 +599,7 @@ export default function ItemDetail({ apiBase, onRefresh }) {
                 )}
                 <button
                   type="button"
-                  className="btn btn-search-again"
+                  className="btn-search-again"
                   onClick={searchAlternatives}
                   disabled={alternativesLoading}
                 >

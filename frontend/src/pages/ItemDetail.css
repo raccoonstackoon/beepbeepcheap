@@ -760,7 +760,7 @@
   box-sizing: border-box;
 }
 
-/* Save All button */
+/* Save All button — pink */
 .btn-save-all {
   display: flex;
   align-items: center;
@@ -768,8 +768,8 @@
   gap: var(--space-sm);
   width: 100%;
   padding: var(--space-sm) var(--space-md);
-  background: linear-gradient(135deg, #4ECDC4 0%, #3BB5AD 100%);
-  color: white;
+  background: linear-gradient(135deg, var(--pixel-peach) 0%, #ff9ec4 100%);
+  color: var(--pixel-dark);
   border: 1px solid var(--pixel-outline);
   border-radius: var(--border-radius-md);
   font-family: var(--font-pixel);
@@ -784,7 +784,7 @@
 .btn-save-all:hover:not(:disabled) {
   transform: translateY(-2px);
   box-shadow: var(--shadow-pixel);
-  background: linear-gradient(135deg, #3BB5AD 0%, #4ECDC4 100%);
+  background: linear-gradient(135deg, #ff9ec4 0%, var(--pixel-peach) 100%);
 }
 
 .btn-save-all:active:not(:disabled) {
@@ -798,7 +798,7 @@
 }
 
 .btn-save-all--done {
-  background: #A7F3D0;
+  background: linear-gradient(135deg, #ffc8dc 0%, var(--pixel-peach) 100%);
   color: var(--pixel-dark);
   border-color: var(--pixel-outline);
 }
@@ -880,7 +880,7 @@
   font-size: var(--font-size-xs);
 }
 
-/* Search again button */
+/* Search again button — yellow (match Save all typography; no global .btn) */
 .btn-search-again {
   display: flex;
   align-items: center;
@@ -888,20 +888,29 @@
   gap: var(--space-sm);
   width: 100%;
   padding: var(--space-sm) var(--space-md);
-  background: var(--bg-secondary);
-  color: var(--text-secondary);
-  border: 1px dashed var(--pixel-outline);
+  background: linear-gradient(135deg, var(--pixel-yellow) 0%, #ffc233 100%);
+  color: var(--pixel-dark);
+  border: 1px solid var(--pixel-outline);
   border-radius: var(--border-radius-md);
   font-family: var(--font-pixel);
   font-size: var(--font-size-xs);
+  line-height: 1.4;
   text-transform: uppercase;
   cursor: pointer;
   transition: all 0.15s ease;
+  box-shadow: var(--shadow-pixel-sm);
+  image-rendering: pixelated;
+}
+
+.btn-search-again svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
 }
 
 .btn-search-again:hover:not(:disabled) {
-  background: var(--bg-card);
-  color: var(--text-primary);
+  background: linear-gradient(135deg, #ffe566 0%, var(--pixel-yellow) 100%);
+  color: var(--pixel-dark);
   border-style: solid;
 }
 
