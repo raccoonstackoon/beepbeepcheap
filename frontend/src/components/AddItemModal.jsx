@@ -859,54 +859,67 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
             </div>
             
             <p className="shopping-options-select-hint">
-              Tap a card to track one listing, or tick more rows and use <strong>Track selected</strong>. The first result is checked by default.
+              Tap <strong>image or title</strong> to track one listing, or use the <strong>checkbox</strong> and <strong>Track selected</strong>. The first result is checked by default.
             </p>
 
             <div className="shopping-options-list">
               {shoppingOptions.map((option, index) => (
-                <div 
-                  key={index} 
+                <div
+                  key={index}
                   className={`shopping-option-card ${trackIncluded[index] ? '' : 'shopping-option-card--excluded'}`}
-                  onClick={() => handleSelectOption(option)}
-                  role="button"
-                  tabIndex={0}
                 >
-                  <label
-                    className="option-track-check"
-                    onClick={(e) => e.stopPropagation()}
-                  >
+                  <label className="option-track-check" htmlFor={`track-include-${index}`}>
                     <input
+                      id={`track-include-${index}`}
                       type="checkbox"
                       checked={Boolean(trackIncluded[index])}
                       onChange={(e) => toggleTrackIncluded(index, e)}
+                      onClick={(e) => e.stopPropagation()}
                       aria-label={`Include listing ${index + 1} when tracking selected`}
                     />
                   </label>
-                  <div className="option-image-wrap">
-                    {option.imageUrl && (
-                      <img src={option.imageUrl} alt={option.title} className="option-image" />
-                    )}
-                    <span className="option-rank">{index + 1}</span>
-                  </div>
-                  <div className="option-details">
-                    <h4 className="option-title">{option.title}</h4>
-                    <div className="option-meta">
-                      <span className="option-store">{option.storeName}</span>
-                      {option.price && (
-                        <span className="option-price">
-                          {option.currency || '£'}{option.price.toFixed(2)}
-                          {option.currency && option.currency !== '£' && (
-                            <span className="currency-label">
-                              {' '}{({ '€': 'EUR', '$': 'USD', 'kr': 'SEK' })[option.currency] || ''}
-                            </span>
-                          )}
-                        </span>
+                  <div
+                    className="option-card-select-main"
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => handleSelectOption(option)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        handleSelectOption(option);
+                      }
+                    }}
+                  >
+                    <div className="option-image-wrap">
+                      {option.imageUrl && (
+                        <img src={option.imageUrl} alt="" className="option-image" />
                       )}
+                      <span className="option-rank">{index + 1}</span>
+                    </div>
+                    <div className="option-details">
+                      <h4 className="option-title">{option.title}</h4>
+                      <div className="option-meta">
+                        <span className="option-store">{option.storeName}</span>
+                        {option.price && (
+                          <span className="option-price">
+                            {option.currency || '£'}{option.price.toFixed(2)}
+                            {option.currency && option.currency !== '£' && (
+                              <span className="currency-label">
+                                {' '}{({ '€': 'EUR', '$': 'USD', 'kr': 'SEK' })[option.currency] || ''}
+                              </span>
+                            )}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
-                  <button 
+                  <button
+                    type="button"
                     className="option-dismiss"
-                    onClick={(e) => { e.stopPropagation(); handleDismissOption(index); }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDismissOption(index);
+                    }}
                     title="Remove this result"
                     aria-label="Remove"
                   >

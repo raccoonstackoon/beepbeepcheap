@@ -1,3 +1,9 @@
+# SQLite + uploads need a PERSISTENT DISK on Render or data is wiped every deploy.
+# See README → "Saved items disappear after every deploy". Paid instances: add disk + set:
+#   DATABASE_PATH=/var/beepbeep-data/pricetracker.db
+#   UPLOADS_PATH=/var/beepbeep-data/uploads
+# Blueprint example: https://docs.render.com/docs/blueprint-spec#disks
+
 services:
   - type: web
     name: beepbeep-api

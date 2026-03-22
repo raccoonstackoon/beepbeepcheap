@@ -121,6 +121,25 @@ This is **not** full login security (the id is secret-ish but not a password). C
 
 ## Troubleshooting
 
+### Saved items disappear after every deploy (Git push / Render redeploy)
+
+**What’s going on:** The API stores your list in a **SQLite file** on the server (`pricetracker.db`). On **Render** (and many similar hosts), the app’s filesystem is **ephemeral** by default: each new deploy starts from a **clean machine**, so the old database file is **gone** and you see an **empty list**. This isn’t caused by Git itself — it’s **redeploy + no persistent storage**.
+
+**Fix (recommended on Render): use a persistent disk**
+
+1. In the [Render Dashboard](https://dashboard.render.com), open your **API** service (e.g. `beepbeep-api`).
+2. Go to **Disks** → **Add disk** (this requires a **paid** instance type on Render; the free web tier usually **cannot** attach a disk).
+3. Choose a **mount path**, e.g. `/var/beepbeep-data`, and a size (e.g. 1 GB).
+4. Under **Environment**, set:
+   - `DATABASE_PATH` = `/var/beepbeep-data/pricetracker.db`
+   - `UPLOADS_PATH` = `/var/beepbeep-data/uploads`  
+   (So **photo uploads** survive redeploys too; the app already creates these folders if missing.)
+5. **Redeploy** the service once. New data will live on the disk and **persist across future deploys**.
+
+**Alternatives:** Use a **managed database** (e.g. Render PostgreSQL) and migrate the app off SQLite, or a hosted SQLite like **Turso** — more work, but no single-server disk limit.
+
+**Also check:** Each browser has its own list via `X-User-Id` in `localStorage`. **Clearing site data** or using another device looks like “everything disappeared” even if the server still has data — that’s a different issue from deploys wiping the DB.
+
 ### "Failed to scrape product"
 - Some websites block scrapers or use complex JavaScript
 - Try a different product URL or retailer
