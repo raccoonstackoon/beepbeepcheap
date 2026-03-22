@@ -563,8 +563,18 @@ export default function ItemDetail({ apiBase, onRefresh }) {
                   ))}
                 </div>
 
+                </>
+              ) : (
+                <div className="no-alternatives">
+                  <p>No matching products found</p>
+                  <span>Couldn't find this exact product at other stores</span>
+                </div>
+              )}
+
+              <div className="alternatives-actions-row">
                 {alternatives.length > 1 && (
                   <button
+                    type="button"
                     className={`btn-save-all ${allSaved ? 'btn-save-all--done' : ''}`}
                     onClick={handleSaveAll}
                     disabled={savingAll || allSaved}
@@ -587,22 +597,16 @@ export default function ItemDetail({ apiBase, onRefresh }) {
                     )}
                   </button>
                 )}
-                </>
-              ) : (
-                <div className="no-alternatives">
-                  <p>No matching products found</p>
-                  <span>Couldn't find this exact product at other stores</span>
-                </div>
-              )}
-              
-              <button 
-                className="btn btn-search-again"
-                onClick={searchAlternatives}
-                disabled={alternativesLoading}
-              >
-                <RefreshCw size={14} />
-                Search Again
-              </button>
+                <button
+                  type="button"
+                  className="btn btn-search-again"
+                  onClick={searchAlternatives}
+                  disabled={alternativesLoading}
+                >
+                  <RefreshCw size={14} />
+                  Search Again
+                </button>
+              </div>
             </>
           )}
           

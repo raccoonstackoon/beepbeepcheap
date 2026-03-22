@@ -741,6 +741,25 @@
   animation: spin 1s linear infinite;
 }
 
+/* Save All + Search Again — equal width, spaced (see .alternatives-actions-row) */
+.alternatives-actions-row {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  gap: var(--space-md);
+  margin-top: var(--space-md);
+}
+
+.alternatives-actions-row > .btn-save-all,
+.alternatives-actions-row > .btn-search-again {
+  flex: 1 1 0;
+  min-width: 0;
+  width: auto;
+  margin-top: 0;
+  min-height: 48px;
+  box-sizing: border-box;
+}
+
 /* Save All button */
 .btn-save-all {
   display: flex;
