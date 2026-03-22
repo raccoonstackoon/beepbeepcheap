@@ -178,6 +178,11 @@
   color: var(--pixel-teal);
 }
 
+.install-step-muted {
+  color: var(--text-muted);
+  font-weight: normal;
+}
+
 .install-step-icon-hint {
   display: flex;
   align-items: center;

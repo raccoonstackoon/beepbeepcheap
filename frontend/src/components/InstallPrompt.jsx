@@ -1,17 +1,9 @@
 import { useState, useEffect } from 'react';
-import { MoreHorizontal, Share, MoreVertical, Plus } from 'lucide-react';
+import { Share, MoreVertical, Plus } from 'lucide-react';
 import './InstallPrompt.css';
 
 function isIos() {
   return /iP(hone|ad|od)/.test(navigator.userAgent);
-}
-
-/** Real Mobile Safari (not Chrome/Firefox/Edge on iOS) — share sheet flow differs */
-function isIosSafari() {
-  const ua = navigator.userAgent;
-  const ios = /iP(hone|ad|od)/.test(ua);
-  const webkitSafari = /Safari/.test(ua) && !/CriOS|FxiOS|OPiOS|EdgiOS/.test(ua);
-  return ios && webkitSafari;
 }
 
 function isStandalone() {
@@ -19,21 +11,8 @@ function isStandalone() {
          window.navigator.standalone === true;
 }
 
-/** Safari on iPhone: menu ⋯ → Share → More → Add to Home Screen */
-const SAFARI_STEPS = [
-  {
-    body: (
-      <>
-        Tap the <strong>⋯</strong> (three-dots) button at the <strong>bottom right</strong>
-      </>
-    ),
-    hint: (
-      <>
-        <MoreHorizontal size={20} aria-hidden />
-        <span>Opens Safari’s menu</span>
-      </>
-    ),
-  },
+/** Generic steps — exact menus differ by browser; labels vary slightly on screen */
+const INSTALL_STEPS = [
   {
     body: (
       <>
@@ -43,27 +22,27 @@ const SAFARI_STEPS = [
     hint: (
       <>
         <Share size={20} aria-hidden />
-        <span>In that menu</span>
+        <span>Usually in the toolbar or browser menu</span>
       </>
     ),
   },
   {
     body: (
       <>
-        Tap <strong>More</strong> — or <strong>View more</strong> if that’s what you see
+        Tap <strong>View more</strong> <span className="install-step-muted">(or similar)</span>
       </>
     ),
     hint: (
       <>
         <MoreVertical size={20} aria-hidden />
-        <span>So “Add to Home Screen” can appear</span>
+        <span>So you can see more actions</span>
       </>
     ),
   },
   {
     body: (
       <>
-        Tap <strong>Add to Home Screen</strong>, then confirm with <strong>Add</strong>
+        Tap <strong>Add to Home Screen</strong>, then confirm if asked
       </>
     ),
     hint: (
@@ -79,8 +58,6 @@ export default function InstallPrompt() {
   const [visible, setVisible] = useState(false);
   const [showHow, setShowHow] = useState(false);
   const [instructionStep, setInstructionStep] = useState(0);
-
-  const safariFlow = isIosSafari();
 
   useEffect(() => {
     if (!isIos() || isStandalone()) return;
@@ -126,16 +103,16 @@ export default function InstallPrompt() {
               Sure!
             </button>
           </div>
-        ) : safariFlow ? (
+        ) : (
           <div className="install-gate-how install-gate-how--card fade-in">
             <div className="install-gate-card">
-              <h2 className="install-gate-how-title">Add in Safari</h2>
+              <h2 className="install-gate-how-title">How to add</h2>
               <p className="install-gate-how-sub">
-                Step {instructionStep + 1} of {SAFARI_STEPS.length}
+                Step {instructionStep + 1} of {INSTALL_STEPS.length} — menus look a bit different in each browser
               </p>
 
               <div className="install-steps">
-                {SAFARI_STEPS.map((step, i) => (
+                {INSTALL_STEPS.map((step, i) => (
                   <div
                     key={i}
                     className={`install-step ${
@@ -173,7 +150,7 @@ export default function InstallPrompt() {
                     Back
                   </button>
                 )}
-                {instructionStep < SAFARI_STEPS.length - 1 ? (
+                {instructionStep < INSTALL_STEPS.length - 1 ? (
                   <button
                     type="button"
                     className="btn-install btn-install-primary"
@@ -191,19 +168,6 @@ export default function InstallPrompt() {
                   </button>
                 )}
               </div>
-            </div>
-          </div>
-        ) : (
-          <div className="install-gate-how install-gate-how--card fade-in">
-            <div className="install-gate-card">
-              <h2 className="install-gate-how-title">Use Safari</h2>
-              <p className="install-generic-text">
-                To add beepbeep to your home screen with the guided steps, open this page in{' '}
-                <strong>Safari</strong> (Apple’s blue compass app), then come back here.
-              </p>
-              <button type="button" className="btn-install btn-install-primary btn-install-lg" onClick={closeHow}>
-                OK
-              </button>
             </div>
           </div>
         )}
