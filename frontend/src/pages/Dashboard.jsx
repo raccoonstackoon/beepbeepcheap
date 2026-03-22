@@ -20,6 +20,7 @@ import { Hyrax, Raccoon } from '../components/PixelMascot';
 import hyraxImage from '../assets/hyrax.png';
 import raccoonImage from '../assets/raccoon.png';
 import './Dashboard.css';
+import { apiFetch } from '../apiConfig.js';
 
 export default function Dashboard({ items, alerts, onRefresh, apiBase }) {
   const [showAddModal, setShowAddModal] = useState(false);
@@ -67,6 +68,11 @@ export default function Dashboard({ items, alerts, onRefresh, apiBase }) {
       })
     : baseItems;
 
+  // Clear search when the bar is hidden (8 or fewer items)
+  useEffect(() => {
+    if (items.length <= 8) setSearchQuery('');
+  }, [items.length]);
+
   const handleToggleSearch = () => {
     setShowSearch(prev => {
       if (!prev) {
@@ -89,7 +95,7 @@ export default function Dashboard({ items, alerts, onRefresh, apiBase }) {
     try {
       // Refresh each item sequentially
       for (const item of items.filter(i => i.url)) {
-        await fetch(`${apiBase}/items/${item.id}/refresh`, { method: 'POST' });
+        await apiFetch(apiBase, `/items/${item.id}/refresh`, { method: 'POST' });
       }
       onRefresh();
     } catch (error) {
@@ -150,12 +156,12 @@ export default function Dashboard({ items, alerts, onRefresh, apiBase }) {
     const initRewards = async () => {
       try {
         // Fetch current rewards
-        const res = await fetch(`${apiBase}/rewards`);
+        const res = await apiFetch(apiBase, '/rewards');
         const data = await res.json();
         setRewards(data);
         
         // Do daily check-in
-        const checkinRes = await fetch(`${apiBase}/rewards/checkin`, { method: 'POST' });
+        const checkinRes = await apiFetch(apiBase, '/rewards/checkin', { method: 'POST' });
         const checkinData = await checkinRes.json();
         
         if (checkinData.streakUpdated && checkinData.coinsEarned > 0) {
@@ -177,7 +183,7 @@ export default function Dashboard({ items, alerts, onRefresh, apiBase }) {
     const checkMilestones = async () => {
       // Check first item milestone
       if (items.length >= 1 && !rewards.first_item_claimed) {
-        const res = await fetch(`${apiBase}/rewards/claim/first_item`, { method: 'POST' });
+        const res = await apiFetch(apiBase, '/rewards/claim/first_item', { method: 'POST' });
         const data = await res.json();
         if (data.success) {
           setRewards(data.rewards);
@@ -187,7 +193,7 @@ export default function Dashboard({ items, alerts, onRefresh, apiBase }) {
       
       // Check savings milestones
       if (totalSavings >= 10 && !rewards.savings_10_claimed) {
-        const res = await fetch(`${apiBase}/rewards/claim/savings_10`, { method: 'POST' });
+        const res = await apiFetch(apiBase, '/rewards/claim/savings_10', { method: 'POST' });
         const data = await res.json();
         if (data.success) {
           setRewards(data.rewards);
@@ -196,7 +202,7 @@ export default function Dashboard({ items, alerts, onRefresh, apiBase }) {
       }
       
       if (totalSavings >= 50 && !rewards.savings_50_claimed) {
-        const res = await fetch(`${apiBase}/rewards/claim/savings_50`, { method: 'POST' });
+        const res = await apiFetch(apiBase, '/rewards/claim/savings_50', { method: 'POST' });
         const data = await res.json();
         if (data.success) {
           setRewards(data.rewards);
@@ -205,7 +211,7 @@ export default function Dashboard({ items, alerts, onRefresh, apiBase }) {
       }
       
       if (totalSavings >= 100 && !rewards.savings_100_claimed) {
-        const res = await fetch(`${apiBase}/rewards/claim/savings_100`, { method: 'POST' });
+        const res = await apiFetch(apiBase, '/rewards/claim/savings_100', { method: 'POST' });
         const data = await res.json();
         if (data.success) {
           setRewards(data.rewards);
@@ -222,7 +228,7 @@ export default function Dashboard({ items, alerts, onRefresh, apiBase }) {
   const handleGiantClick = async (mascotId) => {
     try {
       const caughtMascot = fallingMascots.find(m => m.id === mascotId);
-      const res = await fetch(`${apiBase}/rewards/catch`, { method: 'POST' });
+      const res = await apiFetch(apiBase, '/rewards/catch', { method: 'POST' });
       const data = await res.json();
       
       setRewards(data.rewards);
@@ -395,30 +401,32 @@ export default function Dashboard({ items, alerts, onRefresh, apiBase }) {
         </div>
       </section>
 
-      {/* Internal Search Bar */}
-      <div className="internal-search-bar">
-        <div className="internal-search-container">
-          <Search size={16} className="internal-search-icon" />
-          <input
-            ref={searchInputRef}
-            className="internal-search-input"
-            type="text"
-            placeholder="Search your saved items..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-          {searchQuery && (
-            <>
-              <span className="internal-search-count">
-                {filteredItems.length} / {items.length}
-              </span>
-              <button className="internal-search-clear" onClick={() => setSearchQuery('')} aria-label="Clear search">
-                <X size={14} />
-              </button>
-            </>
-          )}
+      {/* Internal Search Bar — only when many items make search useful */}
+      {items.length > 8 && (
+        <div className="internal-search-bar">
+          <div className="internal-search-container">
+            <Search size={16} className="internal-search-icon" />
+            <input
+              ref={searchInputRef}
+              className="internal-search-input"
+              type="text"
+              placeholder="Search your saved items..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+            {searchQuery && (
+              <>
+                <span className="internal-search-count">
+                  {filteredItems.length} / {items.length}
+                </span>
+                <button className="internal-search-clear" onClick={() => setSearchQuery('')} aria-label="Clear search">
+                  <X size={14} />
+                </button>
+              </>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Items Grid */}
       <main className="main-modern">

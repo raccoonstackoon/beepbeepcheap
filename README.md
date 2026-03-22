@@ -84,6 +84,15 @@ If the **website** is on Vercel (or similar) and the **API** is on Render (`beep
 
 After changing config, **redeploy the frontend on Vercel** and **restart/redeploy the API on Render** if you changed env vars.
 
+### Per-device lists (privacy between phones)
+
+Each browser generates a **random id** (UUID) stored in `localStorage` and sends it as **`X-User-Id`** on API calls. Items, alerts, rewards, and push subscriptions are scoped to that id — **another person’s phone won’t see your list**.
+
+This is **not** full login security (the id is secret-ish but not a password). Clearing site data generates a **new** empty list.
+
+**Old data before per-user support:** the server migration assigns legacy rows to a fixed id `10000000-0000-4000-8000-000000000001`. To attach one browser to that bucket (e.g. recover an old shared list), advanced users can set in devtools:  
+`localStorage.setItem('beepbeep_user_id', '10000000-0000-4000-8000-000000000001')` then reload.
+
 ## How to Use
 
 ### Adding Items

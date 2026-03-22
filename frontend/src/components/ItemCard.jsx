@@ -9,6 +9,7 @@ import {
   MoreVertical
 } from 'lucide-react';
 import './ItemCard.css';
+import { apiFetch } from '../apiConfig.js';
 
 export default function ItemCard({ item, apiBase, onRefresh, style }) {
   const [refreshing, setRefreshing] = useState(false);
@@ -39,7 +40,7 @@ export default function ItemCard({ item, apiBase, onRefresh, style }) {
     
     setRefreshing(true);
     try {
-      await fetch(`${apiBase}/items/${item.id}/refresh`, { method: 'POST' });
+      await apiFetch(apiBase, `/items/${item.id}/refresh`, { method: 'POST' });
       onRefresh();
     } catch (error) {
       console.error('Failed to refresh:', error);
@@ -54,7 +55,7 @@ export default function ItemCard({ item, apiBase, onRefresh, style }) {
     if (!confirm('Delete this item?')) return;
     
     try {
-      await fetch(`${apiBase}/items/${item.id}`, { method: 'DELETE' });
+      await apiFetch(apiBase, `/items/${item.id}`, { method: 'DELETE' });
       onRefresh();
     } catch (error) {
       console.error('Failed to delete:', error);

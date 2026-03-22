@@ -120,6 +120,72 @@ export function initDatabase() {
     INSERT OR IGNORE INTO rewards (id, coins) VALUES (1, 0)
   `);
 
+  migratePerUserData(db);
+
   console.log('✅ Database initialized successfully');
+}
+
+/**
+ * Per-user lists: items and push carry user_id; rewards move to user_rewards.
+ */
+function migratePerUserData(db) {
+  // Valid UUID v4 shape so X-User-Id middleware can accept it for one-time “recover old list” if needed
+  const LEGACY = '10000000-0000-4000-8000-000000000001';
+
+  try {
+    db.exec(`ALTER TABLE items ADD COLUMN user_id TEXT`);
+  } catch (e) {
+    if (!String(e.message).includes('duplicate column name')) throw e;
+  }
+  db.prepare(`UPDATE items SET user_id = ? WHERE user_id IS NULL OR TRIM(user_id) = ''`).run(LEGACY);
+
+  try {
+    db.exec(`ALTER TABLE push_subscriptions ADD COLUMN user_id TEXT`);
+  } catch (e) {
+    if (!String(e.message).includes('duplicate column name')) throw e;
+  }
+  db.prepare(
+    `UPDATE push_subscriptions SET user_id = ? WHERE user_id IS NULL OR TRIM(user_id) = ''`
+  ).run(LEGACY);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS user_rewards (
+      user_id TEXT PRIMARY KEY,
+      coins INTEGER DEFAULT 0,
+      giants_caught INTEGER DEFAULT 0,
+      first_item_claimed INTEGER DEFAULT 0,
+      savings_10_claimed INTEGER DEFAULT 0,
+      savings_50_claimed INTEGER DEFAULT 0,
+      savings_100_claimed INTEGER DEFAULT 0,
+      streak_current INTEGER DEFAULT 0,
+      streak_best INTEGER DEFAULT 0,
+      last_checkin_date TEXT
+    )
+  `);
+
+  const legacyRewards = db.prepare(`SELECT * FROM rewards WHERE id = 1`).get();
+  const hasLegacyRow = db.prepare(`SELECT 1 FROM user_rewards WHERE user_id = ?`).get(LEGACY);
+  if (legacyRewards && !hasLegacyRow) {
+    db.prepare(`
+      INSERT INTO user_rewards (
+        user_id, coins, giants_caught, first_item_claimed, savings_10_claimed,
+        savings_50_claimed, savings_100_claimed, streak_current, streak_best, last_checkin_date
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      LEGACY,
+      legacyRewards.coins ?? 0,
+      legacyRewards.giants_caught ?? 0,
+      legacyRewards.first_item_claimed ?? 0,
+      legacyRewards.savings_10_claimed ?? 0,
+      legacyRewards.savings_50_claimed ?? 0,
+      legacyRewards.savings_100_claimed ?? 0,
+      legacyRewards.streak_current ?? 0,
+      legacyRewards.streak_best ?? 0,
+      legacyRewards.last_checkin_date ?? null
+    );
+  }
+
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_items_user_id ON items(user_id)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_push_subscriptions_user_id ON push_subscriptions(user_id)`);
 }
 

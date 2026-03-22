@@ -10,6 +10,7 @@ import {
   Search
 } from 'lucide-react';
 import './AddItemModal.css';
+import { apiFetch } from '../apiConfig.js';
 import ImageAnnotator from './ImageAnnotator';
 
 async function safeJson(res) {
@@ -53,6 +54,8 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
   
   // Shopping options state - top 3 cheapest results
   const [shoppingOptions, setShoppingOptions] = useState([]);
+  /** Parallel to shoppingOptions: include in "Track selected" (all true when results load). */
+  const [trackIncluded, setTrackIncluded] = useState([]);
   const [selectedOption, setSelectedOption] = useState(null);
   const [backupResults, setBackupResults] = useState([]);
   
@@ -94,10 +97,9 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
     setError(null);
     
     try {
-      const res = await fetch(`${apiBase}/items/url`, {
+      const res = await apiFetch(apiBase, '/items/url', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: inputValue.trim() })
+        body: JSON.stringify({ url: inputValue.trim() }),
       });
       
       const data = await safeJson(res);
@@ -120,15 +122,15 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
     setLoading(true);
     setError(null);
     setShoppingOptions([]);
+    setTrackIncluded([]);
     setSelectedOption(null);
     setExtractedData(null);
     setSearchResults(null);
     
     try {
-      const res = await fetch(`${apiBase}/items/search`, {
+      const res = await apiFetch(apiBase, '/items/search', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: inputValue.trim() })
+        body: JSON.stringify({ query: inputValue.trim() }),
       });
       
       const data = await safeJson(res);
@@ -141,6 +143,7 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
       
       if (data.shoppingOptions && data.shoppingOptions.length > 0) {
         setShoppingOptions(data.shoppingOptions);
+        setTrackIncluded(data.shoppingOptions.map(() => true));
         setBackupResults(data.backupResults || []);
       } else {
         setSearchResults({
@@ -175,6 +178,7 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
     setExtractedData(null);
     setSearchResults(null);
     setShoppingOptions([]);
+    setTrackIncluded([]);
     setSelectedOption(null);
     setFocusArea(null);
     setError(null);
@@ -224,13 +228,13 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
         formData.append('focusArea', JSON.stringify(areaToUse));
       }
       
-      const res = await fetch(`${apiBase}/items/image`, {
+      const res = await apiFetch(apiBase, '/items/image', {
         method: 'POST',
-        body: formData
+        body: formData,
       });
-      
+
       const data = await safeJson(res);
-      
+
       if (!res.ok) {
         throw new Error(data.error || 'Failed to process image');
       }
@@ -275,6 +279,7 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
     setError(null);
     setNeedsShopName(false);
     setShoppingOptions([]);
+    setTrackIncluded([]);
     setSelectedOption(null);
     
     try {
@@ -289,13 +294,13 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
         formData.append('focusArea', JSON.stringify(focusArea));
       }
       
-      const res = await fetch(`${apiBase}/items/image`, {
+      const res = await apiFetch(apiBase, '/items/image', {
         method: 'POST',
-        body: formData
+        body: formData,
       });
-      
+
       const data = await safeJson(res);
-      
+
       if (!res.ok) {
         throw new Error(data.error || 'Failed to search');
       }
@@ -305,6 +310,7 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
       // NEW: Handle shopping options (top 3 cheapest)
       if (data.shoppingOptions && data.shoppingOptions.length > 0) {
         setShoppingOptions(data.shoppingOptions);
+        setTrackIncluded(data.shoppingOptions.map(() => true));
         // Don't auto-select, let user choose
       } else {
         // No shopping results found
@@ -327,18 +333,36 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
   };
   
   const handleDismissOption = (index) => {
-    setShoppingOptions(prev => {
+    const hadBackup = backupResults.length > 0;
+    const nextBackupItem = hadBackup ? backupResults[0] : null;
+    const restBackups = hadBackup ? backupResults.slice(1) : [];
+
+    setShoppingOptions((prev) => {
       const updated = [...prev];
       updated.splice(index, 1);
-      
-      // Pull in a backup result if available
-      if (backupResults.length > 0) {
-        const [next, ...rest] = backupResults;
-        updated.push(next);
-        setBackupResults(rest);
+      if (hadBackup && nextBackupItem) {
+        updated.push(nextBackupItem);
       }
-      
       return updated;
+    });
+    setTrackIncluded((prev) => {
+      const next = [...prev];
+      next.splice(index, 1);
+      if (hadBackup) next.push(true);
+      return next;
+    });
+    if (hadBackup) {
+      setBackupResults(restBackups);
+    }
+  };
+
+  const toggleTrackIncluded = (index, e) => {
+    e.stopPropagation();
+    setTrackIncluded((prev) => {
+      const next = [...prev];
+      if (index < 0 || index >= next.length) return prev;
+      next[index] = !next[index];
+      return next;
     });
   };
   
@@ -381,55 +405,63 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
     await handleManualSave();
   };
   
-  const handleTrackAll = async () => {
-    if (shoppingOptions.length === 0) return;
-    
+  const saveMultiTrackFromOptions = async (optionsList) => {
+    if (optionsList.length === 0) return;
+
     setLoading(true);
     setError(null);
-    
+
     try {
       const fixUrl = (url) => {
         if (url && url.startsWith('//')) return 'https:' + url;
         return url || '';
       };
-      
-      // Use the cheapest option as the main item
-      const main = shoppingOptions[0];
+
+      const main = optionsList[0];
       const mainImageUrl = fixUrl(main.imageUrl || identifiedProduct?.localImageUrl || '');
-      
-      // Build tracked_sources from ALL options (including main, for a complete picture)
-      const trackedSources = shoppingOptions.map(opt => ({
+
+      const trackedSources = optionsList.map((opt) => ({
         title: (opt.title || '').trim(),
         url: opt.productUrl || null,
         imageUrl: fixUrl(opt.imageUrl || ''),
         price: opt.price || null,
-        storeName: opt.storeName || null
+        storeName: opt.storeName || null,
       }));
-      
-      const res = await fetch(`${apiBase}/items/manual`, {
+
+      const res = await apiFetch(apiBase, '/items/manual', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: (main.title || inputValue || '').trim(),
           url: main.productUrl || null,
           image_url: mainImageUrl || null,
           current_price: main.price || null,
           store_name: main.storeName || null,
-          tracked_sources: trackedSources
-        })
+          tracked_sources: trackedSources,
+        }),
       });
-      
+
       if (!res.ok) {
         const data = await safeJson(res);
         throw new Error(data.error || 'Failed to save item');
       }
-      
+
       onSuccess();
     } catch (err) {
       setError(err.message);
     }
-    
+
     setLoading(false);
+  };
+
+  const handleTrackAll = () => saveMultiTrackFromOptions(shoppingOptions);
+
+  const handleTrackSelected = () => {
+    const picked = shoppingOptions.filter((_, i) => trackIncluded[i]);
+    if (picked.length === 0) {
+      setError('Select at least one listing using the checkboxes.');
+      return;
+    }
+    saveMultiTrackFromOptions(picked);
   };
   
   // Handle confirmation/submission
@@ -477,16 +509,15 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
     console.log('💾 Saving item with image_url:', manualData.imageUrl);
     
     try {
-      const res = await fetch(`${apiBase}/items/manual`, {
+      const res = await apiFetch(apiBase, '/items/manual', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: manualData.name.trim(),
           url: manualData.url.trim() || null,
           image_url: manualData.imageUrl || null,
           current_price: manualData.price ? parseFloat(manualData.price) : null,
-          store_name: manualData.storeName || null
-        })
+          store_name: manualData.storeName || null,
+        }),
       });
       
       const data = await safeJson(res);
@@ -526,6 +557,7 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
                 } else {
                   setExtractedData(null);
                   setShoppingOptions([]);
+                  setTrackIncluded([]);
                   if (mode === 'product') setNeedsShopName(true);
                 }
               }}
@@ -792,15 +824,30 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
               <span className="shopping-options-count">{shoppingOptions.length} found</span>
             </div>
             
+            <p className="shopping-options-select-hint">
+              Tap a card to track one listing, or use the checks + <strong>Track selected</strong> for several.
+            </p>
+
             <div className="shopping-options-list">
               {shoppingOptions.map((option, index) => (
                 <div 
                   key={index} 
-                  className="shopping-option-card"
+                  className={`shopping-option-card ${trackIncluded[index] ? '' : 'shopping-option-card--excluded'}`}
                   onClick={() => handleSelectOption(option)}
                   role="button"
                   tabIndex={0}
                 >
+                  <label
+                    className="option-track-check"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={Boolean(trackIncluded[index])}
+                      onChange={(e) => toggleTrackIncluded(index, e)}
+                      aria-label={`Include listing ${index + 1} when tracking selected`}
+                    />
+                  </label>
                   <div className="option-image-wrap">
                     {option.imageUrl && (
                       <img src={option.imageUrl} alt={option.title} className="option-image" />
@@ -856,23 +903,31 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
             </div>
             
             {shoppingOptions.length > 1 && (
-              <div className="modal-actions">
-                <button 
-                  className="btn btn-primary"
-                  onClick={handleTrackAll}
-                  disabled={loading}
-                >
-                  {loading ? (
-                    <>
-                      <Loader size={18} className="spinning" />
-                      Saving...
-                    </>
-                  ) : (
-                    <>
-                      Track All {shoppingOptions.length}
-                    </>
-                  )}
-                </button>
+              <div className="modal-actions shopping-options-batch-actions">
+                {loading ? (
+                  <div className="shopping-options-saving-row" aria-live="polite">
+                    <Loader size={18} className="spinning" />
+                    <span>Saving…</span>
+                  </div>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      className="btn btn-track-selected"
+                      onClick={handleTrackSelected}
+                      disabled={!trackIncluded.some(Boolean)}
+                    >
+                      Track selected ({trackIncluded.filter(Boolean).length})
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      onClick={handleTrackAll}
+                    >
+                      Track all
+                    </button>
+                  </>
+                )}
               </div>
             )}
           </div>

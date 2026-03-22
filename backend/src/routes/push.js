@@ -1,6 +1,7 @@
 import express from 'express';
 import { savePushSubscription, removePushSubscription } from '../database/queries.js';
 import { getPublicVapidKey } from '../services/push.js';
+import { requireUserId } from '../middleware/userId.js';
 
 const router = express.Router();
 
@@ -11,8 +12,8 @@ router.get('/vapid-key', (req, res) => {
   res.json({ publicKey: key });
 });
 
-// POST /api/push/subscribe — save a browser's push subscription
-router.post('/subscribe', (req, res) => {
+// POST /api/push/subscribe — save a browser's push subscription for this user
+router.post('/subscribe', requireUserId, (req, res) => {
   const subscription = req.body;
 
   if (!subscription?.endpoint || !subscription?.keys?.p256dh || !subscription?.keys?.auth) {
@@ -20,7 +21,7 @@ router.post('/subscribe', (req, res) => {
   }
 
   try {
-    savePushSubscription(subscription);
+    savePushSubscription(subscription, req.userId);
     res.json({ success: true });
   } catch (err) {
     console.error('Failed to save push subscription:', err);

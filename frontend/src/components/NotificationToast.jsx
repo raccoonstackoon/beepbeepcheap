@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { TrendingDown, X } from 'lucide-react';
 import './NotificationToast.css';
+import { apiFetch } from '../apiConfig.js';
 
 export default function NotificationToast({ alert, onDismiss, apiBase }) {
   const [isVisible, setIsVisible] = useState(false);
@@ -22,7 +23,7 @@ export default function NotificationToast({ alert, onDismiss, apiBase }) {
     // Wait for exit animation
     setTimeout(() => {
       // Mark as read in backend
-      fetch(`${apiBase}/alerts/${alert.id}/read`, { method: 'PUT' }).catch(() => {});
+      apiFetch(apiBase, `/alerts/${alert.id}/read`, { method: 'PUT' }).catch(() => {});
       onDismiss();
     }, 300);
   }, [apiBase, alert.id, onDismiss]);
@@ -43,7 +44,7 @@ export default function NotificationToast({ alert, onDismiss, apiBase }) {
 
   const handleClick = () => {
     // Mark as read and navigate to item
-    fetch(`${apiBase}/alerts/${alert.id}/read`, { method: 'PUT' }).catch(() => {});
+    apiFetch(apiBase, `/alerts/${alert.id}/read`, { method: 'PUT' }).catch(() => {});
     navigate(`/item/${alert.item_id}`);
     onDismiss();
   };

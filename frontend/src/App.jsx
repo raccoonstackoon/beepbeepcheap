@@ -6,7 +6,7 @@ import Rewards from './pages/Rewards';
 import NotificationContainer from './components/NotificationContainer';
 import InstallPrompt from './components/InstallPrompt';
 import './App.css';
-import { getApiBase } from './apiConfig.js';
+import { getApiBase, apiFetch } from './apiConfig.js';
 
 const API_BASE = getApiBase();
 
@@ -17,7 +17,7 @@ function App() {
 
   const fetchItems = async () => {
     try {
-      const res = await fetch(`${API_BASE}/items`);
+      const res = await apiFetch(API_BASE, '/items');
       const data = await res.json();
       setItems(data);
     } catch (error) {
@@ -27,7 +27,7 @@ function App() {
 
   const fetchAlerts = async () => {
     try {
-      const res = await fetch(`${API_BASE}/alerts/unread`);
+      const res = await apiFetch(API_BASE, '/alerts/unread');
       const data = await res.json();
       setAlerts(data);
     } catch (error) {

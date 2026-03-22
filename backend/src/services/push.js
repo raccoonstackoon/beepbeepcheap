@@ -2,7 +2,7 @@ import webpush from 'web-push';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { getAllPushSubscriptions, removePushSubscription } from '../database/queries.js';
+import { getPushSubscriptionsForUser, removePushSubscription } from '../database/queries.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -45,21 +45,16 @@ export function getPublicVapidKey() {
   return vapidKeys?.publicKey || null;
 }
 
-/**
- * Send a push notification to every saved subscription.
- * Automatically removes subscriptions that are no longer valid (expired / unsubscribed).
- */
-export async function sendPushToAll(payload) {
-  const subscriptions = getAllPushSubscriptions();
-  if (subscriptions.length === 0) return;
+async function sendToSubscriptions(subscriptions, payload) {
+  if (!subscriptions.length) return;
 
   const body = JSON.stringify(payload);
 
   const results = await Promise.allSettled(
-    subscriptions.map(sub => {
+    subscriptions.map((sub) => {
       const pushSub = {
         endpoint: sub.endpoint,
-        keys: { p256dh: sub.keys_p256dh, auth: sub.keys_auth }
+        keys: { p256dh: sub.keys_p256dh, auth: sub.keys_auth },
       };
       return webpush.sendNotification(pushSub, body);
     })
@@ -68,7 +63,6 @@ export async function sendPushToAll(payload) {
   results.forEach((result, i) => {
     if (result.status === 'rejected') {
       const statusCode = result.reason?.statusCode;
-      // 404 or 410 means the subscription is gone — clean it up
       if (statusCode === 404 || statusCode === 410) {
         removePushSubscription(subscriptions[i].endpoint);
         console.log('🗑️ Removed expired push subscription');
@@ -79,4 +73,13 @@ export async function sendPushToAll(payload) {
   });
 
   console.log(`📨 Push sent to ${subscriptions.length} subscriber(s)`);
+}
+
+/**
+ * Send a push notification to every saved subscription for one user.
+ */
+export async function sendPushForUser(userId, payload) {
+  if (!userId) return;
+  const subscriptions = getPushSubscriptionsForUser(userId);
+  await sendToSubscriptions(subscriptions, payload);
 }

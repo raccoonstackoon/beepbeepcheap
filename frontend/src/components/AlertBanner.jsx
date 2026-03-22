@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { TrendingDown, Check } from 'lucide-react';
 import './AlertBanner.css';
+import { apiFetch } from '../apiConfig.js';
 
 function formatAlertDate(dateStr) {
   if (!dateStr) return '';
@@ -24,7 +25,7 @@ export default function AlertBanner({ alert, apiBase, onDismiss }) {
     e.stopPropagation();
     
     try {
-      await fetch(`${apiBase}/alerts/${alert.id}/read`, { method: 'PUT' });
+      await apiFetch(apiBase, `/alerts/${alert.id}/read`, { method: 'PUT' });
       onDismiss();
     } catch (error) {
       console.error('Failed to dismiss alert:', error);

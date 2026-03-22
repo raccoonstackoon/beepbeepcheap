@@ -3,6 +3,7 @@ import multer from 'multer';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import * as queries from '../database/queries.js';
+import { requireUserId } from '../middleware/userId.js';
 import { scrapeProduct, scrapePrice, searchShoppingSerpAPI, searchCostco, getStoreName } from '../services/scraper.js';
 import { processImage } from '../services/imageProcessor.js';
 
@@ -21,7 +22,7 @@ const storage = multer.diskStorage({
   }
 });
 
-const upload = multer({ 
+const upload = multer({
   storage,
   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
   fileFilter: (req, file, cb) => {
@@ -35,10 +36,12 @@ const upload = multer({
   }
 });
 
-// GET /api/items - Get all tracked items
+router.use(requireUserId);
+
+// GET /api/items - Get all tracked items for this user
 router.get('/', (req, res) => {
   try {
-    const items = queries.getAllItems();
+    const items = queries.getAllItemsForUser(req.userId);
     res.json(items);
   } catch (error) {
     console.error('Error getting items:', error);
@@ -49,7 +52,7 @@ router.get('/', (req, res) => {
 // GET /api/items/:id - Get a single item
 router.get('/:id', (req, res) => {
   try {
-    const item = queries.getItemById(parseInt(req.params.id));
+    const item = queries.getItemForUser(parseInt(req.params.id, 10), req.userId);
     if (!item) {
       return res.status(404).json({ error: 'Item not found' });
     }
@@ -63,7 +66,10 @@ router.get('/:id', (req, res) => {
 // GET /api/items/:id/history - Get price history for an item
 router.get('/:id/history', (req, res) => {
   try {
-    const history = queries.getPriceHistory(parseInt(req.params.id));
+    const history = queries.getPriceHistoryForUser(parseInt(req.params.id, 10), req.userId);
+    if (history === null) {
+      return res.status(404).json({ error: 'Item not found' });
+    }
     res.json(history);
   } catch (error) {
     console.error('Error getting price history:', error);
@@ -91,6 +97,7 @@ router.post('/url', async (req, res) => {
     }
     
     const item = queries.createItem({
+      userId: req.userId,
       name: scraped.name,
       url: url,
       image_url: scraped.imageUrl,
@@ -402,6 +409,7 @@ router.post('/manual', (req, res) => {
     console.log(`   - Final image URL to save: ${finalImageUrl || 'NONE'}`);
     
     const item = queries.createItem({
+      userId: req.userId,
       name,
       url: url || null,
       image_url: finalImageUrl,
@@ -424,13 +432,13 @@ router.post('/manual', (req, res) => {
 // PUT /api/items/:id - Update an item
 router.put('/:id', (req, res) => {
   try {
-    const id = parseInt(req.params.id);
-    const item = queries.updateItem(id, req.body);
-    
+    const id = parseInt(req.params.id, 10);
+    const item = queries.updateItem(id, req.body, req.userId);
+
     if (!item) {
       return res.status(404).json({ error: 'Item not found' });
     }
-    
+
     res.json(item);
   } catch (error) {
     console.error('Error updating item:', error);
@@ -442,9 +450,9 @@ router.put('/:id', (req, res) => {
 // Also fetches image and store name if missing, and fixes DuckDuckGo tracking URLs
 router.post('/:id/refresh', async (req, res) => {
   try {
-    const id = parseInt(req.params.id);
-    const item = queries.getItemById(id);
-    
+    const id = parseInt(req.params.id, 10);
+    const item = queries.getItemForUser(id, req.userId);
+
     if (!item) {
       return res.status(404).json({ error: 'Item not found' });
     }
@@ -565,7 +573,7 @@ router.post('/:id/refresh', async (req, res) => {
     }
     
     if (Object.keys(updates).length > 0) {
-      updatedItem = queries.updateItem(id, updates);
+      updatedItem = queries.updateItem(id, updates, req.userId);
       console.log(`📝 Updated item ${id}:`, updates);
     }
     
@@ -579,8 +587,11 @@ router.post('/:id/refresh', async (req, res) => {
 // DELETE /api/items/:id - Delete an item
 router.delete('/:id', (req, res) => {
   try {
-    const id = parseInt(req.params.id);
-    queries.deleteItem(id);
+    const id = parseInt(req.params.id, 10);
+    const ok = queries.deleteItem(id, req.userId);
+    if (!ok) {
+      return res.status(404).json({ error: 'Item not found' });
+    }
     res.json({ success: true });
   } catch (error) {
     console.error('Error deleting item:', error);
@@ -594,9 +605,9 @@ router.delete('/:id', (req, res) => {
 // Only returns results that are CHEAPER than current price!
 router.get('/:id/alternatives', async (req, res) => {
   try {
-    const id = parseInt(req.params.id);
-    const item = queries.getItemById(id);
-    
+    const id = parseInt(req.params.id, 10);
+    const item = queries.getItemForUser(id, req.userId);
+
     if (!item) {
       return res.status(404).json({ error: 'Item not found' });
     }

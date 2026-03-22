@@ -2,7 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.jsx'
-import { getApiBase } from './apiConfig.js'
+import { getApiBase, apiFetch } from './apiConfig.js'
 
 async function subscribeToPush(registration) {
   try {
@@ -15,7 +15,7 @@ async function subscribeToPush(registration) {
     if (permission !== 'granted') return;
 
     const apiBase = getApiBase();
-    const res = await fetch(`${apiBase}/push/vapid-key`);
+    const res = await apiFetch(apiBase, '/push/vapid-key');
     if (!res.ok) return;
     const { publicKey } = await res.json();
 
@@ -24,10 +24,9 @@ async function subscribeToPush(registration) {
       applicationServerKey: urlBase64ToUint8Array(publicKey)
     });
 
-    await fetch(`${apiBase}/push/subscribe`, {
+    await apiFetch(apiBase, '/push/subscribe', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(subscription)
+      body: JSON.stringify(subscription),
     });
 
     console.log('🔔 Push notifications enabled');

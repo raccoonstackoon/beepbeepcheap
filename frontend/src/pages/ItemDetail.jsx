@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import PriceChart from '../components/PriceChart';
 import './ItemDetail.css';
+import { apiFetch } from '../apiConfig.js';
 
 async function safeJson(res) {
   const text = await res.text();
@@ -54,8 +55,8 @@ export default function ItemDetail({ apiBase, onRefresh }) {
     const fetchData = async () => {
       try {
         const [itemRes, historyRes] = await Promise.all([
-          fetch(`${apiBase}/items/${id}`),
-          fetch(`${apiBase}/items/${id}/history`)
+          apiFetch(apiBase, `/items/${id}`),
+          apiFetch(apiBase, `/items/${id}/history`),
         ]);
         const itemData = await safeJson(itemRes);
         const historyData = await safeJson(historyRes);
@@ -72,12 +73,12 @@ export default function ItemDetail({ apiBase, onRefresh }) {
   const handleRefresh = async () => {
     setRefreshing(true);
     try {
-      const res = await fetch(`${apiBase}/items/${id}/refresh`, { method: 'POST' });
+      const res = await apiFetch(apiBase, `/items/${id}/refresh`, { method: 'POST' });
       const updatedItem = await safeJson(res);
       setItem(updatedItem);
       
       // Refetch history
-      const historyRes = await fetch(`${apiBase}/items/${id}/history`);
+      const historyRes = await apiFetch(apiBase, `/items/${id}/history`);
       const historyData = await safeJson(historyRes);
       setHistory(historyData);
       
@@ -92,7 +93,7 @@ export default function ItemDetail({ apiBase, onRefresh }) {
     if (!confirm('Are you sure you want to delete this item?')) return;
     
     try {
-      await fetch(`${apiBase}/items/${id}`, { method: 'DELETE' });
+      await apiFetch(apiBase, `/items/${id}`, { method: 'DELETE' });
       onRefresh();
       navigate('/');
     } catch (error) {
@@ -107,7 +108,7 @@ export default function ItemDetail({ apiBase, onRefresh }) {
     setAlternativesSearched(true);
     
     try {
-      const res = await fetch(`${apiBase}/items/${id}/alternatives`);
+      const res = await apiFetch(apiBase, `/items/${id}/alternatives`);
       const data = await safeJson(res);
       
       if (!res.ok) {
@@ -152,22 +153,21 @@ export default function ItemDetail({ apiBase, onRefresh }) {
     setAddingToWatchlist(prev => ({ ...prev, [index]: true }));
     
     try {
-      const res = await fetch(`${apiBase}/items/manual`, {
+      const res = await apiFetch(apiBase, '/items/manual', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: alt.title,
           url: alt.productUrl,
           image_url: alt.imageUrl,
           current_price: alt.price,
-          store_name: alt.storeName
-        })
+          store_name: alt.storeName,
+        }),
       });
-      
+
       if (!res.ok) {
         throw new Error('Failed to add item');
       }
-      
+
       setAddedToWatchlist(prev => ({ ...prev, [index]: true }));
       onRefresh(); // Refresh the dashboard
     } catch (error) {
@@ -192,16 +192,15 @@ export default function ItemDetail({ apiBase, onRefresh }) {
     
     try {
       // First, add the new item
-      const addRes = await fetch(`${apiBase}/items/manual`, {
+      const addRes = await apiFetch(apiBase, '/items/manual', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: alt.title,
           url: alt.productUrl,
           image_url: alt.imageUrl,
           current_price: alt.price,
-          store_name: alt.storeName
-        })
+          store_name: alt.storeName,
+        }),
       });
       
       if (!addRes.ok) {
@@ -211,8 +210,8 @@ export default function ItemDetail({ apiBase, onRefresh }) {
       const newItem = await safeJson(addRes);
       
       // Then, delete the current item
-      const deleteRes = await fetch(`${apiBase}/items/${id}`, {
-        method: 'DELETE'
+      const deleteRes = await apiFetch(apiBase, `/items/${id}`, {
+        method: 'DELETE',
       });
       
       if (!deleteRes.ok) {
@@ -239,16 +238,15 @@ export default function ItemDetail({ apiBase, onRefresh }) {
       for (let i = 0; i < alternatives.length; i++) {
         if (addedToWatchlist[i]) continue;
         const alt = alternatives[i];
-        const res = await fetch(`${apiBase}/items/manual`, {
+        const res = await apiFetch(apiBase, '/items/manual', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             name: alt.title,
             url: alt.productUrl,
             image_url: alt.imageUrl,
             current_price: alt.price,
-            store_name: alt.storeName
-          })
+            store_name: alt.storeName,
+          }),
         });
         if (res.ok) {
           setAddedToWatchlist(prev => ({ ...prev, [i]: true }));

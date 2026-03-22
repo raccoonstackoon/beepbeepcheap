@@ -29,42 +29,54 @@ const PORT = process.env.PORT || 3001;
 const server = createServer(app);
 const wss = new WebSocketServer({ server });
 
-// Store connected clients
+// Store connected clients (each ws has .userId from query ?userId=)
 const clients = new Set();
 
 // WebSocket connection handling
-wss.on('connection', (ws) => {
-  console.log('📱 New WebSocket client connected');
+wss.on('connection', (ws, req) => {
+  let userId = null;
+  try {
+    const u = new URL(req.url || '/', 'http://localhost');
+    userId = u.searchParams.get('userId');
+    if (userId) userId = userId.trim().toLowerCase();
+  } catch {
+    /* ignore */
+  }
+  ws.userId = userId;
+
+  console.log('📱 New WebSocket client connected' + (userId ? ` (user ${userId.slice(0, 8)}…)` : ' (no userId)'));
   clients.add(ws);
-  
-  // Send a welcome message
+
   ws.send(JSON.stringify({ type: 'connected', message: 'Connected to beepbeep.cheap notifications!' }));
-  
+
   ws.on('close', () => {
     console.log('📱 WebSocket client disconnected');
     clients.delete(ws);
   });
-  
+
   ws.on('error', (error) => {
     console.error('WebSocket error:', error);
     clients.delete(ws);
   });
 });
 
-// Function to broadcast price drop alerts to all connected clients
-export function broadcastPriceDropAlert(alert) {
+/** Price-drop toast only to sockets that registered the same user id as the item owner. */
+export function broadcastPriceDropAlert(alert, userId) {
   const message = JSON.stringify({
     type: 'price_drop',
     alert: alert
   });
-  
-  console.log(`🔔 Broadcasting price drop to ${clients.size} clients`);
-  
+
+  let n = 0;
   clients.forEach((client) => {
-    if (client.readyState === 1) { // WebSocket.OPEN
-      client.send(message);
-    }
+    if (client.readyState !== 1) return;
+    if (userId && client.userId && client.userId !== userId) return;
+    if (userId && !client.userId) return;
+    client.send(message);
+    n++;
   });
+
+  console.log(`🔔 Broadcasting price drop to ${n} client(s) for user ${userId ? userId.slice(0, 8) + '…' : '(any)'}`);
 }
 
 // Middleware
@@ -77,7 +89,8 @@ app.use(cors({
         process.env.FRONTEND_URL
       ].filter(Boolean)
     : true, // Allow all origins in development
-  credentials: true
+  credentials: true,
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-User-Id'],
 }));
 app.use(express.json());
 
@@ -163,7 +176,7 @@ if (process.env.NODE_ENV !== 'production') {
       created_at: new Date().toISOString()
     };
     
-    broadcastPriceDropAlert(testAlert);
+    broadcastPriceDropAlert(testAlert, null);
     res.json({ success: true, message: 'Test notification sent!' });
   });
 

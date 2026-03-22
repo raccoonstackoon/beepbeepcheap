@@ -13,6 +13,7 @@ import {
 import { Raccoon } from '../components/PixelMascot';
 import raccoonImage from '../assets/raccoon.png';
 import './Rewards.css';
+import { apiFetch } from '../apiConfig.js';
 
 function Rewards({ apiBase }) {
   const [rewards, setRewards] = useState(null);
@@ -21,7 +22,7 @@ function Rewards({ apiBase }) {
   useEffect(() => {
     const fetchRewards = async () => {
       try {
-        const res = await fetch(`${apiBase}/rewards`);
+        const res = await apiFetch(apiBase, '/rewards');
         const data = await res.json();
         setRewards(data);
       } catch (error) {

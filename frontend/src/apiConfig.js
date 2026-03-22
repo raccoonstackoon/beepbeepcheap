@@ -1,3 +1,43 @@
+import { getOrCreateUserId } from './userId.js';
+
+/**
+ * JSON/API fetch with X-User-Id (skips Content-Type for FormData).
+ * @param {string} apiBase - from getApiBase(), no trailing slash
+ * @param {string} path - e.g. "/items" or "items"
+ */
+export function apiFetch(apiBase, path, options = {}) {
+  const p = path.startsWith('/') ? path : `/${path}`;
+  const url = `${trimSlash(apiBase)}${p}`;
+
+  const headers = new Headers();
+  if (options.headers) {
+    if (options.headers instanceof Headers) {
+      options.headers.forEach((v, k) => headers.set(k, v));
+    } else {
+      Object.entries(options.headers).forEach(([k, v]) => {
+        if (v != null) headers.set(k, String(v));
+      });
+    }
+  }
+  headers.set('X-User-Id', getOrCreateUserId());
+
+  if (options.body && typeof options.body === 'string' && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
+  }
+  if (options.body instanceof FormData) {
+    headers.delete('Content-Type');
+  }
+
+  return fetch(url, { ...options, headers });
+}
+
+/** Append ?userId= for WebSocket auth (must match API header). */
+export function withWebSocketUserId(wsUrl) {
+  const id = getOrCreateUserId();
+  const join = wsUrl.includes('?') ? '&' : '?';
+  return `${wsUrl}${join}userId=${encodeURIComponent(id)}`;
+}
+
 /**
  * Where the browser should send API calls and WebSockets.
  *
@@ -47,31 +87,29 @@ export function getApiBase() {
 }
 
 /**
- * WebSocket URL (no /api path — Express attaches WS on the HTTP server root).
+ * WebSocket URL (no /api path) + ?userId= so the server only sends your price-drop toasts.
  * @param {string} apiBase — from getApiBase()
  */
 export function getWebSocketUrl(apiBase) {
+  let base;
   const explicitWs = import.meta.env.VITE_WS_URL;
-  if (explicitWs) return trimSlash(explicitWs);
-
-  if (apiBase.startsWith('http://')) {
-    return apiBase.replace('http://', 'ws://').replace(/\/api\/?$/, '');
+  if (explicitWs) {
+    base = trimSlash(explicitWs);
+  } else if (apiBase.startsWith('http://')) {
+    base = apiBase.replace('http://', 'ws://').replace(/\/api\/?$/, '');
+  } else if (apiBase.startsWith('https://')) {
+    base = apiBase.replace('https://', 'wss://').replace(/\/api\/?$/, '');
+  } else if (import.meta.env.VITE_BACKEND_ORIGIN && import.meta.env.PROD) {
+    const b = trimSlash(import.meta.env.VITE_BACKEND_ORIGIN);
+    base = b.startsWith('https://')
+      ? `wss://${b.slice('https://'.length)}`
+      : `ws://${b.slice('http://'.length)}`;
+  } else if (import.meta.env.PROD && isBeepbeepCheapHost()) {
+    base = `wss://${trimSlash(DEFAULT_SPLIT_DEPLOY_BACKEND).replace(/^https:\/\//, '')}`;
+  } else {
+    const protocol = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const host = typeof window !== 'undefined' ? window.location.host : 'localhost:3001';
+    base = `${protocol}//${host}`;
   }
-  if (apiBase.startsWith('https://')) {
-    return apiBase.replace('https://', 'wss://').replace(/\/api\/?$/, '');
-  }
-
-  const backendOrigin = import.meta.env.VITE_BACKEND_ORIGIN;
-  if (backendOrigin && import.meta.env.PROD) {
-    const b = trimSlash(backendOrigin);
-    return b.startsWith('https://') ? `wss://${b.slice('https://'.length)}` : `ws://${b.slice('http://'.length)}`;
-  }
-
-  if (import.meta.env.PROD && isBeepbeepCheapHost()) {
-    return `wss://${trimSlash(DEFAULT_SPLIT_DEPLOY_BACKEND).replace(/^https:\/\//, '')}`;
-  }
-
-  const protocol = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const host = typeof window !== 'undefined' ? window.location.host : 'localhost:3001';
-  return `${protocol}//${host}`;
+  return withWebSocketUserId(base);
 }
