@@ -143,7 +143,7 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
       
       if (data.shoppingOptions && data.shoppingOptions.length > 0) {
         setShoppingOptions(data.shoppingOptions);
-        setTrackIncluded(data.shoppingOptions.map(() => true));
+        setTrackIncluded(data.shoppingOptions.map((_, i) => i === 0));
         setBackupResults(data.backupResults || []);
       } else {
         setSearchResults({
@@ -310,7 +310,7 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
       // NEW: Handle shopping options (top 3 cheapest)
       if (data.shoppingOptions && data.shoppingOptions.length > 0) {
         setShoppingOptions(data.shoppingOptions);
-        setTrackIncluded(data.shoppingOptions.map(() => true));
+        setTrackIncluded(data.shoppingOptions.map((_, i) => i === 0));
         // Don't auto-select, let user choose
       } else {
         // No shopping results found
@@ -348,7 +348,7 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
     setTrackIncluded((prev) => {
       const next = [...prev];
       next.splice(index, 1);
-      if (hadBackup) next.push(true);
+      if (hadBackup) next.push(false);
       return next;
     });
     if (hadBackup) {
@@ -825,7 +825,7 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
             </div>
             
             <p className="shopping-options-select-hint">
-              Tap a card to track one listing, or use the checks + <strong>Track selected</strong> for several.
+              Tap a card to track one listing, or tick more rows and use <strong>Track selected</strong>. The first result is checked by default.
             </p>
 
             <div className="shopping-options-list">

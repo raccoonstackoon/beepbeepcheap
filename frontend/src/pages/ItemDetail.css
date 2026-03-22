@@ -3,7 +3,10 @@
 .item-detail {
   max-width: 1000px;
   margin: 0 auto;
-  padding: var(--space-md) var(--space-xl);
+  padding-top: calc(var(--space-md) + env(safe-area-inset-top, 0px));
+  padding-left: calc(var(--space-xl) + env(safe-area-inset-left, 0px));
+  padding-right: calc(var(--space-xl) + env(safe-area-inset-right, 0px));
+  padding-bottom: calc(var(--space-md) + env(safe-area-inset-bottom, 0px));
 }
 
 /* Header */
@@ -887,7 +890,10 @@
 /* Responsive */
 @media (max-width: 768px) {
   .item-detail {
-    padding: var(--space-md);
+    padding-top: calc(var(--space-md) + env(safe-area-inset-top, 0px));
+    padding-left: calc(var(--space-md) + env(safe-area-inset-left, 0px));
+    padding-right: calc(var(--space-md) + env(safe-area-inset-right, 0px));
+    padding-bottom: calc(var(--space-md) + env(safe-area-inset-bottom, 0px));
   }
   
   .detail-header {

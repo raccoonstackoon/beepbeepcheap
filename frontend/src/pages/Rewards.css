@@ -1,8 +1,12 @@
-/* Rewards Page */
+/* Rewards Page — pad for notch / status bar (iOS PWA + Safari) */
 .rewards-page {
   min-height: 100vh;
+  min-height: 100dvh;
   background: transparent;
-  padding: var(--space-lg);
+  padding-top: calc(var(--space-lg) + env(safe-area-inset-top, 0px));
+  padding-left: calc(var(--space-lg) + env(safe-area-inset-left, 0px));
+  padding-right: calc(var(--space-lg) + env(safe-area-inset-right, 0px));
+  padding-bottom: calc(var(--space-lg) + env(safe-area-inset-bottom, 0px));
   max-width: 600px;
   margin: 0 auto;
 }
@@ -353,7 +357,10 @@
 /* Responsive */
 @media (max-width: 480px) {
   .rewards-page {
-    padding: var(--space-md);
+    padding-top: calc(var(--space-md) + env(safe-area-inset-top, 0px));
+    padding-left: calc(var(--space-md) + env(safe-area-inset-left, 0px));
+    padding-right: calc(var(--space-md) + env(safe-area-inset-right, 0px));
+    padding-bottom: calc(var(--space-md) + env(safe-area-inset-bottom, 0px));
   }
 
   .total-coins-card {
