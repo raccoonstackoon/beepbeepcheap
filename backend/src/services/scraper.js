@@ -332,6 +332,23 @@ export async function scrapeProduct(url) {
     const storeName = getStoreName(finalUrl);
     console.log(`📍 Final URL: ${finalUrl}`);
     console.log(`📍 Store detected: ${storeName}`);
+
+    // Lazy-loaded images / prices: nudge scroll so below-the-fold content can hydrate
+    try {
+      await page.evaluate(async () => {
+        const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+        await pause(300);
+        const h = document.body?.scrollHeight || 800;
+        window.scrollTo(0, Math.min(900, Math.floor(h * 0.35)));
+        await pause(500);
+        window.scrollTo(0, Math.min(1600, Math.floor(h * 0.65)));
+        await pause(400);
+        window.scrollTo(0, 0);
+        await pause(200);
+      });
+    } catch (e) {
+      console.log('Scroll nudge skipped:', e.message);
+    }
     
     // Extract product information with store-specific and generic strategies
     const productInfo = await page.evaluate((store) => {
@@ -907,9 +924,18 @@ export async function scrapeProduct(url) {
             continue;
           }
           
-          // Regular URL
+          // Regular / protocol-relative URL
           if (src.startsWith('http') || src.startsWith('//')) {
             return src.startsWith('//') ? 'https:' + src : src;
+          }
+
+          // Relative path (common on CDNs) — resolve against current page
+          if (src.startsWith('/') || (src.length > 2 && !src.startsWith('data:') && !src.startsWith('javascript:'))) {
+            try {
+              return new URL(src, location.href).href;
+            } catch (e) {
+              /* ignore */
+            }
           }
         }
         
@@ -1131,6 +1157,16 @@ export async function scrapeProduct(url) {
   - Price: ${productInfo.price}
   - Image: ${productInfo.imageUrl ? 'Found' : 'Not found'}
   - Store: ${storeName}`);
+
+    // Resolve relative image URLs using final page URL (evaluate may miss some cases)
+    let resolvedImageUrl = productInfo.imageUrl;
+    if (resolvedImageUrl && !/^https?:\/\//i.test(resolvedImageUrl)) {
+      try {
+        resolvedImageUrl = new URL(resolvedImageUrl, finalUrl).href;
+      } catch (e) {
+        console.log('Could not resolve image URL:', e.message);
+      }
+    }
     
     // Final name extraction if still missing (server-side)
     let finalName = productInfo.name;
@@ -1200,7 +1236,7 @@ export async function scrapeProduct(url) {
       success: true,
       name: finalName || 'Unknown Product',
       price: productInfo.price,
-      imageUrl: productInfo.imageUrl,
+      imageUrl: resolvedImageUrl || productInfo.imageUrl,
       storeName,
       url
     };

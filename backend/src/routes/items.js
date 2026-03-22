@@ -77,7 +77,59 @@ router.get('/:id/history', (req, res) => {
   }
 });
 
-// POST /api/items/url - Add item by URL (scrape the page)
+function normalizeItemUrl(raw) {
+  let u = String(raw || '').trim();
+  if (!u) return '';
+  if (u.startsWith('//')) return 'https:' + u;
+  if (!/^https?:\/\//i.test(u)) {
+    u = 'https://' + u.replace(/^\/*/g, '');
+  }
+  return u;
+}
+
+// POST /api/items/url-preview — scrape only; lets the UI confirm/edit before save
+router.post('/url-preview', async (req, res) => {
+  try {
+    const { url } = req.body;
+
+    if (!url) {
+      return res.status(400).json({ error: 'URL is required' });
+    }
+
+    const normalizedUrl = normalizeItemUrl(url);
+    console.log(`Scrape preview URL: ${normalizedUrl}`);
+    const scraped = await scrapeProduct(normalizedUrl);
+
+    if (!scraped.success) {
+      return res.status(400).json({
+        error: 'Failed to scrape product',
+        details: scraped.error,
+      });
+    }
+
+    const warnings = [];
+    if (scraped.price == null || Number.isNaN(Number(scraped.price))) {
+      warnings.push('no_price');
+    }
+    if (!scraped.imageUrl) {
+      warnings.push('no_image');
+    }
+
+    res.json({
+      name: scraped.name,
+      url: normalizedUrl,
+      current_price: scraped.price,
+      image_url: scraped.imageUrl,
+      store_name: scraped.storeName,
+      warnings,
+    });
+  } catch (error) {
+    console.error('Error previewing URL:', error);
+    res.status(500).json({ error: 'Failed to load product page' });
+  }
+});
+
+// POST /api/items/url - Add item by URL (scrape the page) — still supported for API clients
 router.post('/url', async (req, res) => {
   try {
     const { url } = req.body;
@@ -86,8 +138,9 @@ router.post('/url', async (req, res) => {
       return res.status(400).json({ error: 'URL is required' });
     }
     
-    console.log(`Scraping URL: ${url}`);
-    const scraped = await scrapeProduct(url);
+    const normalizedUrl = normalizeItemUrl(url);
+    console.log(`Scraping URL: ${normalizedUrl}`);
+    const scraped = await scrapeProduct(normalizedUrl);
     
     if (!scraped.success) {
       return res.status(400).json({ 
@@ -99,7 +152,7 @@ router.post('/url', async (req, res) => {
     const item = queries.createItem({
       userId: req.userId,
       name: scraped.name,
-      url: url,
+      url: normalizedUrl,
       image_url: scraped.imageUrl,
       store_name: scraped.storeName,
       current_price: scraped.price,

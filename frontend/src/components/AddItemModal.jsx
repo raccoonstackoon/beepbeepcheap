@@ -92,27 +92,53 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
 
   const handleUrlSubmit = async () => {
     if (!inputValue.trim()) return;
-    
+
     setLoading(true);
     setError(null);
-    
+
+    const controller = new AbortController();
+    const timeoutMs = 120000;
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
     try {
-      const res = await apiFetch(apiBase, '/items/url', {
+      const res = await apiFetch(apiBase, '/items/url-preview', {
         method: 'POST',
         body: JSON.stringify({ url: inputValue.trim() }),
+        signal: controller.signal,
       });
-      
+
       const data = await safeJson(res);
-      
+
       if (!res.ok) {
-        throw new Error(data.error || 'Failed to add item');
+        const detail = data.details ? ` ${data.details}` : '';
+        throw new Error((data.error || 'Failed to load product') + detail);
       }
-      
-      onSuccess();
+
+      const warnings = Array.isArray(data.warnings) ? data.warnings : [];
+      setManualData({
+        name: data.name || '',
+        url: data.url || inputValue.trim(),
+        price:
+          data.current_price != null && !Number.isNaN(Number(data.current_price))
+            ? String(data.current_price)
+            : '',
+        imageUrl: data.image_url || '',
+        storeName: data.store_name || '',
+      });
+      setExtractedData({ fromUrlPaste: true, warnings });
+      setSelectedOption({ manual: true, fromUrlPaste: true });
     } catch (err) {
-      setError(err.message);
+      if (err.name === 'AbortError') {
+        setError(
+          'That took too long — some stores block robots or load very slowly. Try again, paste a different link, or add the item manually.'
+        );
+      } else {
+        setError(err.message);
+      }
+    } finally {
+      clearTimeout(timeoutId);
     }
-    
+
     setLoading(false);
   };
 
@@ -544,6 +570,12 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
             <button 
               className="modal-back" 
               onClick={() => {
+                if (extractedData?.fromUrlPaste && selectedOption) {
+                  setSelectedOption(null);
+                  setExtractedData(null);
+                  setManualData({ name: '', url: '', price: '', imageUrl: '', storeName: '' });
+                  return;
+                }
                 if (selectedOption || (searchResults && !searchResults.found)) {
                   setSelectedOption(null);
                   if (searchResults) setSearchResults(null);
@@ -658,7 +690,9 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
               <Loader size={32} className="spinning" />
               <p>{isUrl(inputValue) ? 'Fetching product...' : 'Searching for deals...'}</p>
               <span className="processing-hint">
-                {isUrl(inputValue) ? 'Extracting price and details' : 'Finding the best prices online'}
+                {isUrl(inputValue)
+                  ? 'Opening the store page — can take up to a minute on some sites'
+                  : 'Finding the best prices online'}
               </span>
             </div>
           </div>
@@ -942,16 +976,43 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
                 <span>Great choice! Confirm details below.</span>
               </div>
             )}
+
+            {extractedData?.fromUrlPaste && (
+              <div className="extracted-success url-paste-hint">
+                <Check size={20} />
+                <span>We pulled this from the page — please check name, price, and photo before tracking.</span>
+              </div>
+            )}
+
+            {extractedData?.warnings?.length > 0 && (
+              <div className="url-scrape-warnings" role="status">
+                {extractedData.warnings.includes('no_price') && (
+                  <p className="form-help">Couldn’t detect a price — enter it if you know it.</p>
+                )}
+                {extractedData.warnings.includes('no_image') && (
+                  <p className="form-help">Couldn’t find a product photo — paste an image link if you have one.</p>
+                )}
+              </div>
+            )}
             
             <div className="extracted-preview">
               {/* Show product image */}
-              {(manualData.imageUrl?.startsWith('http') || imagePreview) && (
-                <img 
-                  src={manualData.imageUrl?.startsWith('http') ? manualData.imageUrl : imagePreview} 
-                  alt="Product" 
-                  className="extracted-image" 
-                />
-              )}
+              {(() => {
+                const raw = manualData.imageUrl?.trim();
+                const imgSrc =
+                  raw && (raw.startsWith('http://') || raw.startsWith('https://'))
+                    ? raw
+                    : raw && raw.startsWith('//')
+                      ? `https:${raw}`
+                      : null;
+                if (imgSrc) {
+                  return <img src={imgSrc} alt="Product" className="extracted-image" />;
+                }
+                if (imagePreview) {
+                  return <img src={imagePreview} alt="Product" className="extracted-image" />;
+                }
+                return null;
+              })()}
               
               <div className="form-group">
                 <label>Item Name</label>
@@ -984,6 +1045,40 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
                   <span className="price-value">£{parseFloat(manualData.price).toFixed(2)}</span>
                   <span className="price-store">at {manualData.storeName}</span>
                 </div>
+              )}
+
+              {selectedOption?.manual && (
+                <>
+                  <div className="form-group">
+                    <label>Price (optional)</label>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={manualData.price}
+                      onChange={(e) => setManualData({ ...manualData, price: e.target.value })}
+                      placeholder="e.g. 29.99"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Store (optional)</label>
+                    <input
+                      type="text"
+                      value={manualData.storeName}
+                      onChange={(e) => setManualData({ ...manualData, storeName: e.target.value })}
+                      placeholder="e.g. Amazon"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Image URL (optional)</label>
+                    <input
+                      type="text"
+                      value={manualData.imageUrl}
+                      onChange={(e) => setManualData({ ...manualData, imageUrl: e.target.value })}
+                      placeholder="https://..."
+                    />
+                    <p className="form-help">Fix the link here if the preview image looks wrong.</p>
+                  </div>
+                </>
               )}
             </div>
             

@@ -464,6 +464,23 @@
   image-rendering: pixelated;
 }
 
+.extracted-success.url-paste-hint {
+  background: var(--pixel-sky-blue);
+  color: var(--pixel-dark);
+}
+
+.url-scrape-warnings {
+  margin-bottom: var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--pixel-yellow);
+  border-radius: var(--border-radius-md);
+  background: color-mix(in srgb, var(--pixel-yellow) 18%, var(--bg-card));
+}
+
+.url-scrape-warnings .form-help {
+  margin-bottom: var(--space-xs);
+}
+
 .extracted-preview {
   display: flex;
   flex-direction: column;
