@@ -21,6 +21,10 @@
   text-align: center;
 }
 
+.install-gate-content--wide {
+  max-width: 400px;
+}
+
 /* Phase 1: The ask */
 
 .install-gate-ask {
@@ -62,31 +66,152 @@
   line-height: 1.8;
 }
 
-/* Phase 2: One-liner instruction */
+/* Phase 2: Step-by-step card (Safari) or fallback */
 
 .install-gate-how {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: var(--space-md);
+  width: 100%;
 }
 
-.install-gate-how-line {
+.install-gate-how--card {
+  text-align: left;
+}
+
+.install-gate-card {
+  width: 100%;
+  background: var(--bg-card);
+  border: var(--border-width) solid var(--pixel-outline);
+  border-radius: var(--border-radius-md);
+  padding: var(--space-lg);
+  box-shadow: var(--shadow-pixel-lg);
+}
+
+.install-gate-how-title {
+  font-family: var(--font-pixel);
+  font-size: var(--font-size-sm);
+  color: var(--pixel-teal);
+  line-height: 1.5;
+  margin-bottom: var(--space-xs);
+  -webkit-text-stroke: 0;
+  text-shadow: none;
+  text-align: center;
+}
+
+.install-gate-how-sub {
+  font-family: var(--font-pixel);
+  font-size: 7px;
+  color: var(--text-muted);
+  text-align: center;
+  margin-bottom: var(--space-md);
+  line-height: 1.6;
+}
+
+/* Numbered steps (same vibe as classic install prompt) */
+
+.install-steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  max-height: min(52vh, 380px);
+  overflow-y: auto;
+  padding-right: 2px;
+  margin-bottom: var(--space-md);
+}
+
+.install-step {
+  display: flex;
+  gap: var(--space-md);
+  padding: var(--space-sm);
+  border-radius: var(--border-radius-md);
+  border: 1px solid transparent;
+  transition: opacity 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+  opacity: 0.45;
+}
+
+.install-step-active {
+  opacity: 1;
+  border-color: var(--pixel-teal);
+  background: rgba(78, 205, 196, 0.1);
+}
+
+.install-step-done {
+  opacity: 0.72;
+}
+
+.install-step-number {
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  border: 1px solid var(--pixel-outline);
+  border-radius: var(--border-radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-family: var(--font-pixel);
   font-size: var(--font-size-xs);
-  color: var(--text-primary);
-  line-height: 2;
+  color: var(--pixel-teal);
+  background: var(--bg-secondary);
+  box-shadow: var(--shadow-pixel-sm);
 }
 
-.install-gate-how-line strong {
+.install-step-active .install-step-number {
+  background: var(--pixel-teal);
+  color: var(--pixel-white);
+}
+
+.install-step-done .install-step-number {
+  background: var(--pixel-mint);
+  color: var(--pixel-dark);
+}
+
+.install-step-content p {
+  font-family: var(--font-pixel);
+  font-size: var(--font-size-xs);
+  line-height: 1.65;
+  color: var(--text-primary);
+}
+
+.install-step-content strong {
   color: var(--pixel-teal);
 }
 
-.install-inline-icon {
-  display: inline-block;
-  vertical-align: middle;
+.install-step-icon-hint {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-top: var(--space-xs);
+  color: var(--text-muted);
+  font-family: var(--font-pixel);
+  font-size: 7px;
+  line-height: 1.5;
+}
+
+.install-step-icon-hint svg {
   color: var(--pixel-sky-blue);
-  margin: 0 2px;
+  flex-shrink: 0;
+}
+
+.install-step-nav {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+.install-generic-text {
+  font-family: var(--font-pixel);
+  font-size: var(--font-size-xs);
+  line-height: 1.8;
+  color: var(--text-primary);
+  text-align: center;
+  margin-bottom: var(--space-lg);
+}
+
+.install-generic-text strong {
+  color: var(--pixel-teal);
 }
 
 /* Buttons */
@@ -111,6 +236,11 @@
 .btn-install-primary {
   background: var(--pixel-teal);
   color: var(--pixel-white);
+}
+
+.btn-install-ghost {
+  background: transparent;
+  color: var(--text-secondary);
 }
 
 .btn-install-lg {
