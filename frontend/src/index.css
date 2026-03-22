@@ -28,6 +28,11 @@
   
   /* Background colors */
   --bg-primary: #E8F4F8;
+  /* Page / PWA-style background grid (same values in scripts/generate-pwa-icons.py) */
+  --app-bg-grid-image:
+    linear-gradient(rgba(90, 122, 154, 0.15) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(90, 122, 154, 0.15) 1px, transparent 1px);
+  --app-bg-grid-size: 24px 24px;
   --bg-secondary: #D4E8F0;
   --bg-card: #FFFFFF;
   --bg-card-hover: #F0F8FF;
@@ -90,10 +95,8 @@ body {
   width: 100%;
   /* Subtle square grid background */
   background-color: var(--bg-primary);
-  background-image: 
-    linear-gradient(rgba(90, 122, 154, 0.15) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(90, 122, 154, 0.15) 1px, transparent 1px);
-  background-size: 24px 24px;
+  background-image: var(--app-bg-grid-image);
+  background-size: var(--app-bg-grid-size);
   background-position: 0 0, 0 0;
 }
 

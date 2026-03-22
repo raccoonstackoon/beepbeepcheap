@@ -7,7 +7,11 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--bg-primary);
+  /* Match body background (solid + grid) */
+  background-color: var(--bg-primary);
+  background-image: var(--app-bg-grid-image);
+  background-size: var(--app-bg-grid-size);
+  background-position: 0 0, 0 0;
   padding: var(--space-lg);
 }
 
@@ -29,6 +33,14 @@
 .install-gate-icon {
   width: 72px;
   height: 72px;
+  /* Keep hyrax proportions — don’t stretch to fill the square */
+  object-fit: contain;
+  object-position: center;
+  /* Same treatment as body (bg + grid); letterboxing shows through behind hyrax */
+  background-color: var(--bg-primary);
+  background-image: var(--app-bg-grid-image);
+  background-size: var(--app-bg-grid-size);
+  background-position: 0 0, 0 0;
   border-radius: var(--border-radius-md);
   border: var(--border-width) solid var(--pixel-outline);
   box-shadow: var(--shadow-pixel-lg);
