@@ -459,9 +459,23 @@
   color: var(--text-muted);
 }
 
-.loading-spinner.small {
-  width: 24px;
-  height: 24px;
+/* Hyrax mascot instead of pixel corner-spinner while shops are searched */
+.alternatives-loading-mascot {
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
+  image-rendering: pixelated;
+  animation: alternatives-hyrax-bob 0.85s ease-in-out infinite;
+}
+
+@keyframes alternatives-hyrax-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
 }
 
 /* Error state */

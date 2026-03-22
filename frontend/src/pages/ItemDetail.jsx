@@ -18,6 +18,7 @@ import {
   X
 } from 'lucide-react';
 import PriceChart from '../components/PriceChart';
+import hyraxImage from '../assets/hyrax.png';
 import './ItemDetail.css';
 import { apiFetch } from '../apiConfig.js';
 
@@ -466,7 +467,14 @@ export default function ItemDetail({ apiBase, onRefresh }) {
           
           {alternativesLoading && (
             <div className="alternatives-loading">
-              <div className="loading-spinner small"></div>
+              <img
+                src={hyraxImage}
+                alt=""
+                className="alternatives-loading-mascot"
+                width={56}
+                height={56}
+                decoding="async"
+              />
               <p>Searching for cheaper prices...</p>
               <span className="loading-hint">This may take 10-15 seconds</span>
             </div>
