@@ -6,25 +6,7 @@ import Rewards from './pages/Rewards';
 import NotificationContainer from './components/NotificationContainer';
 import InstallPrompt from './components/InstallPrompt';
 import './App.css';
-
-// Dynamically determine API URL based on current host
-// This allows the app to work on mobile (same network) without manual config
-const getApiBase = () => {
-  // If explicitly set via environment variable, use that
-  if (import.meta.env.VITE_API_URL) {
-    return import.meta.env.VITE_API_URL;
-  }
-  
-  // In production, API is on the same origin
-  if (import.meta.env.PROD) {
-    return '/api';
-  }
-  
-  // In development, use the same hostname but port 3001
-  // This works for both localhost AND when accessing from mobile via IP
-  const currentHost = window.location.hostname;
-  return `http://${currentHost}:3001/api`;
-};
+import { getApiBase } from './apiConfig.js';
 
 const API_BASE = getApiBase();
 

@@ -7,8 +7,9 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      # Browser origin (CORS + cookies). Must match where users open the app (not the API URL).
       - key: FRONTEND_URL
-        value: https://beepbeep-api.onrender.com
+        value: https://beepbeep.cheap
       - key: ANTHROPIC_API_KEY
         sync: false
       - key: SERPAPI_KEY

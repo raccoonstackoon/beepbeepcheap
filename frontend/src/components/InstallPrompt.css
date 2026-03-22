@@ -1,182 +1,83 @@
-/* Install Prompt - Retro Pixel Style */
+/* Install Gate — Mandatory full-screen blocker */
 
-.install-prompt-overlay {
+.install-gate {
   position: fixed;
-  bottom: 100px;
-  left: 0;
-  right: 0;
-  z-index: 9999;
+  inset: 0;
+  z-index: 99999;
   display: flex;
+  align-items: center;
   justify-content: center;
-  padding: 0 var(--space-md);
-  pointer-events: none;
-}
-
-.install-prompt {
-  pointer-events: all;
-  background: var(--bg-card);
-  border: var(--border-width) solid var(--pixel-outline);
-  border-radius: var(--border-radius-md);
+  background: var(--bg-primary);
   padding: var(--space-lg);
-  max-width: 380px;
+}
+
+.install-gate-content {
+  max-width: 320px;
   width: 100%;
+  text-align: center;
+}
+
+/* Phase 1: The ask */
+
+.install-gate-ask {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-lg);
+}
+
+.install-gate-icon {
+  width: 72px;
+  height: 72px;
+  border-radius: var(--border-radius-md);
+  border: var(--border-width) solid var(--pixel-outline);
   box-shadow: var(--shadow-pixel-lg);
-  position: relative;
-  animation: prompt-slide-up 0.4s ease-out;
 }
 
-@keyframes prompt-slide-up {
-  from {
-    opacity: 0;
-    transform: translateY(24px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.install-prompt-close {
-  position: absolute;
-  top: var(--space-sm);
-  right: var(--space-sm);
-  background: transparent;
-  border: 1px solid var(--pixel-outline);
-  border-radius: var(--border-radius-md);
-  width: 28px;
-  height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-muted);
-  transition: all 0.1s ease;
-}
-
-.install-prompt-close:hover {
-  background: var(--accent-danger);
-  color: var(--pixel-white);
-}
-
-.install-prompt-header {
-  display: flex;
-  align-items: center;
-  gap: var(--space-md);
-  margin-bottom: var(--space-lg);
-}
-
-.install-prompt-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: var(--border-radius-md);
-  border: 1px solid var(--pixel-outline);
-  box-shadow: var(--shadow-pixel-sm);
-  flex-shrink: 0;
-}
-
-.install-prompt-title {
+.install-gate-title {
   font-family: var(--font-pixel);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-md);
   color: var(--pixel-teal);
-  margin-bottom: 4px;
+  line-height: 1.5;
   -webkit-text-stroke: 0;
   text-shadow: none;
 }
 
-.install-prompt-subtitle {
+.install-gate-desc {
   font-family: var(--font-pixel);
   font-size: var(--font-size-xs);
   color: var(--text-secondary);
-  line-height: 1.5;
+  line-height: 1.8;
 }
 
-/* Steps */
+/* Phase 2: One-liner instruction */
 
-.install-steps {
+.install-gate-how {
   display: flex;
   flex-direction: column;
-  gap: var(--space-md);
-}
-
-.install-step {
-  display: flex;
-  gap: var(--space-md);
-  padding: var(--space-sm);
-  border-radius: var(--border-radius-md);
-  border: 1px solid transparent;
-  transition: all 0.2s ease;
-  opacity: 0.4;
-}
-
-.install-step-active {
-  opacity: 1;
-  border-color: var(--pixel-teal);
-  background: rgba(78, 205, 196, 0.08);
-}
-
-.install-step-done {
-  opacity: 0.6;
-}
-
-.install-step-number {
-  width: 24px;
-  height: 24px;
-  min-width: 24px;
-  border: 1px solid var(--pixel-outline);
-  border-radius: var(--border-radius-md);
-  display: flex;
   align-items: center;
-  justify-content: center;
+  gap: var(--space-md);
+}
+
+.install-gate-how-line {
   font-family: var(--font-pixel);
   font-size: var(--font-size-xs);
-  color: var(--pixel-teal);
-  background: var(--bg-secondary);
-  box-shadow: var(--shadow-pixel-sm);
-}
-
-.install-step-active .install-step-number {
-  background: var(--pixel-teal);
-  color: var(--pixel-white);
-}
-
-.install-step-done .install-step-number {
-  background: var(--pixel-mint);
-  color: var(--pixel-dark);
-}
-
-.install-step-content p {
-  font-family: var(--font-pixel);
-  font-size: var(--font-size-xs);
-  line-height: 1.6;
   color: var(--text-primary);
+  line-height: 2;
 }
 
-.install-step-content strong {
+.install-gate-how-line strong {
   color: var(--pixel-teal);
 }
 
-.install-step-icon-hint {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  margin-top: var(--space-xs);
-  color: var(--text-muted);
-  font-family: var(--font-pixel);
-  font-size: 7px;
-}
-
-.install-step-icon-hint svg {
+.install-inline-icon {
+  display: inline-block;
+  vertical-align: middle;
   color: var(--pixel-sky-blue);
-  flex-shrink: 0;
+  margin: 0 2px;
 }
 
-/* Navigation buttons */
-
-.install-step-nav {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--space-sm);
-  margin-top: var(--space-sm);
-}
+/* Buttons */
 
 .btn-install {
   font-family: var(--font-pixel);
@@ -187,11 +88,7 @@
   box-shadow: var(--shadow-pixel-sm);
   transition: all 0.1s ease;
   text-transform: uppercase;
-}
-
-.btn-install:hover {
-  transform: translate(-1px, -1px);
-  box-shadow: 2px 2px 0px var(--pixel-outline);
+  cursor: pointer;
 }
 
 .btn-install:active {
@@ -204,20 +101,19 @@
   color: var(--pixel-white);
 }
 
-.btn-install-ghost {
-  background: transparent;
-  color: var(--text-secondary);
+.btn-install-lg {
+  width: 100%;
+  padding: var(--space-md) var(--space-lg);
+  font-size: var(--font-size-sm);
 }
 
-/* Generic (non-iOS) text */
+/* Fade in */
 
-.install-generic-text {
-  font-family: var(--font-pixel);
-  font-size: var(--font-size-xs);
-  line-height: 1.8;
-  color: var(--text-primary);
+.fade-in {
+  animation: gate-fade-in 0.4s ease-out;
 }
 
-.install-generic-text strong {
-  color: var(--pixel-teal);
+@keyframes gate-fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
 }

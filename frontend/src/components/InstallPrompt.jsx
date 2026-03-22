@@ -1,12 +1,9 @@
 import { useState, useEffect } from 'react';
-import { X, Share, Plus } from 'lucide-react';
+import { Share } from 'lucide-react';
 import './InstallPrompt.css';
 
-function isIosSafari() {
-  const ua = navigator.userAgent;
-  const isIos = /iP(hone|ad|od)/.test(ua);
-  const isSafari = /Safari/.test(ua) && !/CriOS|FxiOS|OPiOS|EdgiOS/.test(ua);
-  return isIos && isSafari;
+function isIos() {
+  return /iP(hone|ad|od)/.test(navigator.userAgent);
 }
 
 function isStandalone() {
@@ -15,92 +12,47 @@ function isStandalone() {
 }
 
 export default function InstallPrompt() {
-  const [show, setShow] = useState(false);
-  const [step, setStep] = useState(0);
+  const [visible, setVisible] = useState(false);
+  const [showHow, setShowHow] = useState(false);
 
   useEffect(() => {
-    if (isStandalone()) return;
-
-    const dismissed = localStorage.getItem('pwa-install-dismissed');
-    if (dismissed) {
-      const dismissedAt = parseInt(dismissed, 10);
-      const threeDays = 3 * 24 * 60 * 60 * 1000;
-      if (Date.now() - dismissedAt < threeDays) return;
-    }
-
-    const timer = setTimeout(() => setShow(true), 3000);
+    if (!isIos() || isStandalone()) return;
+    const timer = setTimeout(() => setVisible(true), 800);
     return () => clearTimeout(timer);
   }, []);
 
-  const handleDismiss = () => {
-    setShow(false);
-    localStorage.setItem('pwa-install-dismissed', Date.now().toString());
-  };
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (isStandalone()) setVisible(false);
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, []);
 
-  if (!show) return null;
-
-  const isIos = isIosSafari();
+  if (!visible) return null;
 
   return (
-    <div className="install-prompt-overlay fade-in">
-      <div className="install-prompt">
-        <button className="install-prompt-close" onClick={handleDismiss} aria-label="Close">
-          <X size={16} />
-        </button>
-
-        <div className="install-prompt-header">
-          <img src="/icons/icon-192.png" alt="beepbeep" className="install-prompt-icon" />
-          <div>
-            <h3 className="install-prompt-title">Install beepbeep.cheap</h3>
-            <p className="install-prompt-subtitle">Add to your home screen for the full app experience</p>
-          </div>
-        </div>
-
-        {isIos ? (
-          <div className="install-steps">
-            <div className={`install-step ${step === 0 ? 'install-step-active' : step > 0 ? 'install-step-done' : ''}`}>
-              <div className="install-step-number">1</div>
-              <div className="install-step-content">
-                <p>Tap the <strong>Share</strong> button in Safari's toolbar</p>
-                <div className="install-step-icon-hint">
-                  <Share size={20} />
-                  <span>It looks like this (bottom of screen)</span>
-                </div>
-              </div>
-            </div>
-            <div className={`install-step ${step === 1 ? 'install-step-active' : step > 1 ? 'install-step-done' : ''}`}>
-              <div className="install-step-number">2</div>
-              <div className="install-step-content">
-                <p>Scroll down and tap <strong>"Add to Home Screen"</strong></p>
-                <div className="install-step-icon-hint">
-                  <Plus size={20} />
-                  <span>You may need to scroll in the share menu</span>
-                </div>
-              </div>
-            </div>
-            <div className={`install-step ${step === 2 ? 'install-step-active' : ''}`}>
-              <div className="install-step-number">3</div>
-              <div className="install-step-content">
-                <p>Tap <strong>"Add"</strong> in the top right corner — done!</p>
-              </div>
-            </div>
-            <div className="install-step-nav">
-              {step > 0 && (
-                <button className="btn-install btn-install-ghost" onClick={() => setStep(s => s - 1)}>Back</button>
-              )}
-              {step < 2 ? (
-                <button className="btn-install btn-install-primary" onClick={() => setStep(s => s + 1)}>Next</button>
-              ) : (
-                <button className="btn-install btn-install-primary" onClick={handleDismiss}>Got it!</button>
-              )}
-            </div>
+    <div className="install-gate">
+      <div className="install-gate-content">
+        {!showHow ? (
+          <div className="install-gate-ask fade-in">
+            <img src="/icons/icon-192.png" alt="beepbeep" className="install-gate-icon" />
+            <h2 className="install-gate-title">Add beepbeep to your home screen</h2>
+            <p className="install-gate-desc">
+              Works best as an app. Takes 10 seconds!
+            </p>
+            <button
+              className="btn-install btn-install-primary btn-install-lg"
+              onClick={() => setShowHow(true)}
+            >
+              Sure!
+            </button>
           </div>
         ) : (
-          <div className="install-steps">
-            <p className="install-generic-text">
-              Open this page in <strong>Safari</strong> on your iPhone, then tap the Share button and select "Add to Home Screen" to install the app.
+          <div className="install-gate-how fade-in">
+            <p className="install-gate-how-line">
+              Tap <Share size={16} className="install-inline-icon" /> at the bottom, then <strong>"Add to Home Screen"</strong>
             </p>
-            <button className="btn-install btn-install-primary" onClick={handleDismiss}>Got it!</button>
           </div>
         )}
       </div>

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import NotificationToast from './NotificationToast';
+import { getWebSocketUrl } from '../apiConfig.js';
 
 // Play notification sound using Web Audio API
 const playNotificationSound = () => {
@@ -38,17 +39,8 @@ export default function NotificationContainer({ apiBase, onNewAlert }) {
         return;
       }
       
-      // Determine WebSocket URL based on API base
-      let wsUrl;
-      if (apiBase.startsWith('http://')) {
-        wsUrl = apiBase.replace('http://', 'ws://').replace('/api', '');
-      } else if (apiBase.startsWith('https://')) {
-        wsUrl = apiBase.replace('https://', 'wss://').replace('/api', '');
-      } else {
-        // Relative URL (production)
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        wsUrl = `${protocol}//${window.location.host}`;
-      }
+      // Split deploy (e.g. Vercel + Render): WS must hit the API host, not the static site
+      const wsUrl = getWebSocketUrl(apiBase);
 
       console.log('🔌 Connecting to WebSocket:', wsUrl);
 

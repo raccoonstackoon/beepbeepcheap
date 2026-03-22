@@ -72,6 +72,18 @@ npm run dev
 
 Visit http://localhost:5173 in your browser.
 
+### Production (beepbeep.cheap + Render API)
+
+If the **website** is on Vercel (or similar) and the **API** is on Render (`beepbeep-api.onrender.com`):
+
+1. **`frontend/vercel.json`** — `/api/*` is proxied to Render so tools and bookmarks like `https://beepbeep.cheap/api/health` return JSON instead of the React app.
+2. **`frontend/src/apiConfig.js`** — When the app runs on `beepbeep.cheap` or `www.beepbeep.cheap`, the UI talks **directly** to the Render API for `fetch` and **WebSockets** (avoids Vercel timeouts on slow searches and fixes live alerts).
+3. **Render** — Set `FRONTEND_URL` to `https://beepbeep.cheap` in the dashboard (see `render.yaml`) so CORS allows the browser to call the API from your domain.
+
+**Optional overrides (any host):** set `VITE_API_URL` (full base including `/api`), or `VITE_BACKEND_ORIGIN` + path `/api` is added in production builds.
+
+After changing config, **redeploy the frontend on Vercel** and **restart/redeploy the API on Render** if you changed env vars.
+
 ## How to Use
 
 ### Adding Items

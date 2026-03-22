@@ -2,12 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.jsx'
-
-const getApiBase = () => {
-  if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL;
-  if (import.meta.env.PROD) return '/api';
-  return `http://${window.location.hostname}:3001/api`;
-};
+import { getApiBase } from './apiConfig.js'
 
 async function subscribeToPush(registration) {
   try {
