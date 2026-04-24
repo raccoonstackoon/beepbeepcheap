@@ -80,21 +80,26 @@ export function updateItemPrice(id, newPrice) {
 
   if (!item) return null;
 
-  const lowest_price = Math.min(item.lowest_price || newPrice, newPrice);
+  // Ensure prices are numbers for accurate comparison
+  const currentPrice = Number(item.current_price);
+  const newPriceNum = Number(newPrice);
+  const lowestPrice = Number(item.lowest_price || newPriceNum);
+
+  const lowest_price = Math.min(lowestPrice, newPriceNum);
   const last_checked = new Date().toISOString();
 
   db.prepare(
     `
-    UPDATE items 
+    UPDATE items
     SET current_price = ?, lowest_price = ?, last_checked = ?
     WHERE id = ?
   `
-  ).run(newPrice, lowest_price, last_checked, id);
+  ).run(newPriceNum, lowest_price, last_checked, id);
 
-  addPriceHistory(id, newPrice);
+  addPriceHistory(id, newPriceNum);
 
-  if (item.current_price && newPrice < item.current_price) {
-    createAlert(id, item.current_price, newPrice);
+  if (currentPrice && newPriceNum < currentPrice) {
+    createAlert(id, currentPrice, newPriceNum);
   }
 
   return getItemById(id);
