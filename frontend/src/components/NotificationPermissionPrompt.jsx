@@ -15,12 +15,12 @@ export default function NotificationPermissionPrompt() {
     // Only show in PWA mode
     if (!isStandalone()) return;
 
-    // Check if already prompted
-    const hasPrompted = localStorage.getItem('notification-permission-prompted');
-    if (hasPrompted) return;
-
-    // Check if already granted
+    // Don't show if permission already granted
     if (Notification.permission === 'granted') return;
+
+    // Don't show if user explicitly dismissed it
+    const hasDismissed = localStorage.getItem('notification-permission-dismissed');
+    if (hasDismissed) return;
 
     // Show after a short delay
     const timer = setTimeout(() => setVisible(true), 1500);
@@ -31,7 +31,6 @@ export default function NotificationPermissionPrompt() {
     setLoading(true);
     try {
       const permission = await Notification.requestPermission();
-      localStorage.setItem('notification-permission-prompted', 'true');
       if (permission === 'granted') {
         setVisible(false);
       }
@@ -43,7 +42,7 @@ export default function NotificationPermissionPrompt() {
   };
 
   const handleDismiss = () => {
-    localStorage.setItem('notification-permission-prompted', 'true');
+    localStorage.setItem('notification-permission-dismissed', 'true');
     setVisible(false);
   };
 
