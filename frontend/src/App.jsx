@@ -5,6 +5,7 @@ import ItemDetail from './pages/ItemDetail';
 import Rewards from './pages/Rewards';
 import NotificationContainer from './components/NotificationContainer';
 import InstallPrompt from './components/InstallPrompt';
+import NotificationPermissionPrompt from './components/NotificationPermissionPrompt';
 import './App.css';
 import { getApiBase, apiFetch } from './apiConfig.js';
 
@@ -78,7 +79,10 @@ function App() {
       
       {/* PWA install prompt for mobile users */}
       <InstallPrompt />
-      
+
+      {/* Notification permission prompt */}
+      <NotificationPermissionPrompt />
+
       <Routes>
         <Route 
           path="/" 
