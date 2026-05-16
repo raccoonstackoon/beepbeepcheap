@@ -22,20 +22,21 @@ export async function checkAllPrices() {
   for (const item of itemsWithUrls) {
     try {
       console.log(`Checking: ${item.name}`);
-      const newPrice = await scrapePrice(item.url);
-      
+      // Pass previous price for cross-validation
+      const newPrice = await scrapePrice(item.url, item.current_price);
+
       if (newPrice !== null) {
         const oldPrice = item.current_price;
         updateItemPrice(item.id, newPrice);
         checked++;
-        
+
         if (oldPrice !== newPrice) {
           updated++;
           const changePercent = ((newPrice - oldPrice) / oldPrice * 100).toFixed(1);
           const direction = newPrice < oldPrice ? '📉' : '📈';
-          console.log(`  ${direction} Price changed: $${oldPrice} → $${newPrice} (${changePercent}%)`);
+          console.log(`  ${direction} Price changed: £${oldPrice} → £${newPrice} (${changePercent}%)`);
         } else {
-          console.log(`  ✓ Price unchanged: $${newPrice}`);
+          console.log(`  ✓ Price unchanged: £${newPrice}`);
         }
       } else {
         errors++;
