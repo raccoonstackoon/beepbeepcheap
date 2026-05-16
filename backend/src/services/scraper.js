@@ -1227,32 +1227,6 @@ export async function scrapeProduct(url) {
         }
       }
       
-      // Try JSON-LD structured data for image
-      if (!imageUrl) {
-        try {
-          const ldJsonElements = document.querySelectorAll('script[type="application/ld+json"]');
-          for (const ldJson of ldJsonElements) {
-            const data = JSON.parse(ldJson.textContent);
-            const items = Array.isArray(data) ? data : [data];
-            for (const item of items) {
-              const product = item['@type'] === 'Product' ? item : null;
-              if (product?.image) {
-                const img = Array.isArray(product.image) ? product.image[0] : product.image;
-                if (typeof img === 'string' && img.startsWith('http')) {
-                  imageUrl = img;
-                  break;
-                } else if (img?.url) {
-                  imageUrl = img.url;
-                  break;
-                }
-              }
-              if (imageUrl) break;
-            }
-            if (imageUrl) break;
-          }
-        } catch (e) {}
-      }
-      
       // Final fallback: try to extract name from URL for fashion sites
       if (isInvalidName(name)) {
         // Try to get name from URL path (e.g., /oversized-wool-blend-coat-p02010744.html)
