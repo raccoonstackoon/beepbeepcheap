@@ -1408,9 +1408,9 @@ export async function scrapeProduct(url) {
  * Scrapes just the price from a URL (for price updates)
  */
 /**
- * Daily price check - scrapes price with validation.
- * Runs scraper twice and cross-validates to ensure accuracy.
- * If results differ significantly, prefers the price closer to previousPrice.
+ * Daily price check - scrapes price with strict validation.
+ * Requires multiple consistent scrapes to accept a big price change.
+ * Otherwise keeps the previous price (safer than corrupting data).
  *
  * @param {string} url - Product URL to scrape
  * @param {number|null} previousPrice - Last known price (used for validation)
@@ -1420,51 +1420,84 @@ export async function scrapePrice(url, previousPrice = null) {
   console.log(`💰 Daily price check for: ${url}`);
   if (previousPrice) console.log(`   Previous price: £${previousPrice}`);
 
-  // First attempt
+  // First scrape
   const result1 = await scrapeProduct(url);
   if (!result1.success || !result1.price) {
-    console.log(`   ⚠️ First scrape failed or returned no price`);
-    return null;
+    console.log(`   ⚠️ First scrape failed — keeping previous price`);
+    return previousPrice;
   }
   const price1 = result1.price;
-  console.log(`   First scrape: £${price1}`);
+  console.log(`   Scrape 1: £${price1}`);
 
-  // Cross-validate: if price is dramatically different from previous, scrape again to confirm
-  if (previousPrice && previousPrice > 0) {
-    const changePercent = Math.abs((price1 - previousPrice) / previousPrice) * 100;
-
-    // If price changed > 30%, this is suspicious — verify with a second scrape
-    if (changePercent > 30) {
-      console.log(`   ⚠️ Price change ${changePercent.toFixed(0)}% > 30% — running verification scrape`);
-
-      // Wait briefly to avoid hammering the server
-      await new Promise(resolve => setTimeout(resolve, 3000));
-
-      const result2 = await scrapeProduct(url);
-      if (!result2.success || !result2.price) {
-        console.log(`   ⚠️ Verification scrape failed — keeping previous price`);
-        return previousPrice;
-      }
-      const price2 = result2.price;
-      console.log(`   Second scrape: £${price2}`);
-
-      // If both scrapes agree (within 5%), trust the new price
-      const scrapeDiff = Math.abs((price1 - price2) / price1) * 100;
-      if (scrapeDiff < 5) {
-        console.log(`   ✅ Both scrapes agree (${scrapeDiff.toFixed(1)}% diff) — accepting new price £${price1}`);
-        return price1;
-      }
-
-      // Scrapes disagree — pick the price closer to previous price
-      const diff1 = Math.abs(price1 - previousPrice);
-      const diff2 = Math.abs(price2 - previousPrice);
-      const chosenPrice = diff1 < diff2 ? price1 : price2;
-      console.log(`   ⚠️ Scrapes disagree — picking £${chosenPrice} (closer to previous £${previousPrice})`);
-      return chosenPrice;
-    }
+  // If no previous price (first ever check), just return the scrape
+  if (!previousPrice || previousPrice <= 0) {
+    return price1;
   }
 
-  return price1;
+  const changePercent = Math.abs((price1 - previousPrice) / previousPrice) * 100;
+  console.log(`   Change from previous: ${changePercent.toFixed(1)}%`);
+
+  // SMALL CHANGE (< 15%): trust it, normal price fluctuation
+  if (changePercent < 15) {
+    return price1;
+  }
+
+  // MEDIUM CHANGE (15-30%): one verification scrape to confirm
+  if (changePercent < 30) {
+    console.log(`   ⚠️ Medium change — running 1 verification scrape`);
+    await new Promise(resolve => setTimeout(resolve, 3000));
+    const result2 = await scrapeProduct(url);
+    if (!result2.success || !result2.price) {
+      console.log(`   Keeping previous price (verification failed)`);
+      return previousPrice;
+    }
+    console.log(`   Scrape 2: £${result2.price}`);
+
+    // Both must be within 5% of each other AND close to scrape 1
+    const scrapeDiff = Math.abs((result2.price - price1) / price1) * 100;
+    if (scrapeDiff < 5) {
+      console.log(`   ✅ Both scrapes agree — accepting £${price1}`);
+      return price1;
+    }
+    console.log(`   ⚠️ Scrapes disagree — keeping previous price £${previousPrice}`);
+    return previousPrice;
+  }
+
+  // LARGE CHANGE (> 30%): require 2 verification scrapes to ALL agree
+  // This protects against the scraper picking wrong elements like sidebar prices
+  console.log(`   🚨 Large change (${changePercent.toFixed(0)}%) — requires 2 verification scrapes`);
+
+  await new Promise(resolve => setTimeout(resolve, 3000));
+  const result2 = await scrapeProduct(url);
+  if (!result2.success || !result2.price) {
+    console.log(`   Keeping previous price (verification 1 failed)`);
+    return previousPrice;
+  }
+  console.log(`   Scrape 2: £${result2.price}`);
+
+  await new Promise(resolve => setTimeout(resolve, 3000));
+  const result3 = await scrapeProduct(url);
+  if (!result3.success || !result3.price) {
+    console.log(`   Keeping previous price (verification 2 failed)`);
+    return previousPrice;
+  }
+  console.log(`   Scrape 3: £${result3.price}`);
+
+  // All 3 scrapes must agree within 5% of each other
+  const prices = [price1, result2.price, result3.price];
+  const maxPrice = Math.max(...prices);
+  const minPrice = Math.min(...prices);
+  const spread = ((maxPrice - minPrice) / minPrice) * 100;
+
+  if (spread < 5) {
+    // All 3 agree — this is a real price change
+    const avgPrice = prices.reduce((a, b) => a + b, 0) / 3;
+    console.log(`   ✅ All 3 scrapes agree (spread ${spread.toFixed(1)}%) — real change to £${avgPrice.toFixed(2)}`);
+    return avgPrice;
+  }
+
+  console.log(`   ⚠️ Scrapes inconsistent (spread ${spread.toFixed(1)}%) — keeping previous price £${previousPrice}`);
+  return previousPrice;
 }
 
 /**
