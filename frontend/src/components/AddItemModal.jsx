@@ -236,24 +236,24 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
     }
   };
 
-  // Step 1: Identify the product (check if we need shop name)
+  // Step 1: Identify the product or get Google Lens results directly
   const handleImageProcess = async (area = null) => {
     if (!imageFile) return;
-    
+
     setLoading(true);
     setError(null);
-    
+
     try {
       const formData = new FormData();
       formData.append('image', imageFile);
-      formData.append('identifyOnly', 'true'); // Just identify, don't search yet
-      
+      // Don't pass identifyOnly — let the backend do Google Lens first
+
       // Include the focus area coordinates if provided (from spotlight annotation)
       const areaToUse = area || focusArea;
       if (areaToUse) {
         formData.append('focusArea', JSON.stringify(areaToUse));
       }
-      
+
       const res = await apiFetch(apiBase, '/items/image', {
         method: 'POST',
         body: formData,
@@ -264,34 +264,42 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
       if (!res.ok) {
         throw new Error(data.error || 'Failed to process image');
       }
-      
-      // Store the identified product info
-      setIdentifiedProduct({
-        ...data.extracted,
-        localImageUrl: data.localImageUrl
-      });
-      
-      // Set the product name for potential editing
-      setProductNameInput(data.extracted.itemName || '');
-      
-      // Set variants if extracted
-      const variants = data.extracted.variants || {};
-      setVariantsInput({
-        color: variants.color || '',
-        size: variants.size || '',
-        quantity: variants.quantity || '',
-        model: variants.model || ''
-      });
-      
-      // Always show the confirmation/edit screen first
-      // User can verify/edit the product name and enter brand if needed
-      setNeedsShopName(true);
-      setShopNameInput(data.extracted.brand || '');
-      
+
+      // If Google Lens found results directly, show them immediately
+      if (data.skipConfirmation && data.shoppingOptions?.length > 0) {
+        console.log('✅ Google Lens found results — showing directly');
+        setExtractedData(data.extracted || {
+          itemName: data.shoppingOptions[0]?.title || 'Product',
+          localImageUrl: data.localImageUrl
+        });
+        setShoppingOptions(data.shoppingOptions);
+        setTrackIncluded(data.shoppingOptions.map((_, i) => i === 0));
+        setNeedsShopName(false);
+      } else {
+        // Text-based fallback: show shop name confirmation screen
+        setIdentifiedProduct({
+          ...data.extracted,
+          localImageUrl: data.localImageUrl
+        });
+
+        setProductNameInput(data.extracted.itemName || '');
+
+        const variants = data.extracted.variants || {};
+        setVariantsInput({
+          color: variants.color || '',
+          size: variants.size || '',
+          quantity: variants.quantity || '',
+          model: variants.model || ''
+        });
+
+        setNeedsShopName(true);
+        setShopNameInput(data.extracted.brand || '');
+      }
+
     } catch (err) {
       setError(err.message);
     }
-    
+
     setLoading(false);
   };
   
