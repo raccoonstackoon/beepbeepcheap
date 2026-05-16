@@ -2162,16 +2162,18 @@ export async function searchImageViaGoogleLens(imagePath) {
   const apiKey = process.env.SERPAPI_KEY;
 
   if (!apiKey) {
-    console.warn('⚠️ SERPAPI_KEY not set — cannot use Google Lens image search');
+    console.error('❌ SERPAPI_KEY not set — cannot use Google Lens image search');
     return { success: false, error: 'SERPAPI_KEY not configured', results: [] };
   }
 
   try {
-    console.log(`📷 Google Lens image search via SerpAPI: ${imagePath}`);
+    console.log(`📷 Google Lens image search via SerpAPI`);
+    console.log(`   Image path: ${imagePath}`);
 
     // Read the image file and convert to base64
     const imageBuffer = await fs.promises.readFile(imagePath);
     const base64Image = imageBuffer.toString('base64');
+    console.log(`   Image size: ${imageBuffer.length} bytes`);
 
     // Use SerpAPI's Google Lens engine with image
     const params = new URLSearchParams({
@@ -2183,18 +2185,22 @@ export async function searchImageViaGoogleLens(imagePath) {
     });
 
     const url = `https://serpapi.com/search.json?${params}`;
+    console.log(`   Calling SerpAPI Google Lens...`);
     const response = await fetch(url, { signal: AbortSignal.timeout(30000) });
 
     if (!response.ok) {
       const body = await response.text();
-      console.error(`❌ Google Lens search error ${response.status}: ${body}`);
+      console.error(`❌ Google Lens error ${response.status}: ${body.substring(0, 200)}`);
       return { success: false, error: `SerpAPI ${response.status}`, results: [] };
     }
 
     const data = await response.json();
     const visualMatches = data.visual_matches || [];
 
-    console.log(`📊 Google Lens found ${visualMatches.length} visual matches`);
+    console.log(`✅ Google Lens returned ${visualMatches.length} matches`);
+    if (visualMatches.length === 0) {
+      console.log(`   Response had: ${Object.keys(data).join(', ')}`);
+    }
 
     const results = visualMatches
       .slice(0, 10)
