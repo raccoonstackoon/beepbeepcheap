@@ -216,11 +216,21 @@ router.post('/image', upload.single('image'), async (req, res) => {
         shoppingOptions: googleLensResult.results.slice(0, 3),
         searchMethod: 'google_lens',
         skipConfirmation: true,
+        debug: {
+          googleLensResults: googleLensResult.results.length,
+          message: '✅ Google Lens found results'
+        }
       });
     }
 
     // FALLBACK: Text-based search (only if Google Lens found nothing)
     console.log(`⚠️ Google Lens found nothing — trying text-based search...`);
+    const googleLensDebug = {
+      success: googleLensResult.success,
+      resultsCount: googleLensResult.results?.length || 0,
+      error: googleLensResult.error,
+      message: '❌ Google Lens returned no results, falling back to text search'
+    };
     const result = await processImage(imagePath, 'product', focusArea);
     
     if (!result.success) {
@@ -308,6 +318,7 @@ router.post('/image', upload.single('image'), async (req, res) => {
       localImageUrl: imageUrl,
       shoppingOptions: topResults,
       searchMethod: 'text_fallback',
+      debug: googleLensDebug
     });
     
   } catch (error) {
