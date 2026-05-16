@@ -253,47 +253,49 @@ router.post('/image', upload.single('image'), async (req, res) => {
     }
     
     // ═══════════════════════════════════════════════════════════════════════
-    // STEP 3: SEARCH DUCKDUCKGO SHOPPING for cheapest prices
-    // Returns TOP 3 cheapest results for user to choose from
+    // STEP 3: Choose search strategy based on text clarity
+    // If image has no clear text, use Google Lens visual matching directly
+    // If image has clear text, use text-based shopping search
     // ═══════════════════════════════════════════════════════════════════════
-    const productName = result.itemName || result.description || '';
-    
-    // Build search query: brand + product name (avoid duplicating brand if already in product name)
-    let searchQuery = productName;
-    if (brandName) {
-      const brandLower = brandName.toLowerCase();
-      const productLower = productName.toLowerCase();
-      // Only add brand if not already in product name
-      if (!productLower.includes(brandLower)) {
-        searchQuery = `${brandName} ${productName}`.trim();
+    const hasGoodTextDetection = detectedBrand || (result.itemName && result.itemName.length > 5);
+    let topResults = [];
+    let searchMethod = 'google_lens'; // Default to visual search
+
+    if (hasGoodTextDetection) {
+      // Text-based search
+      const productName = result.itemName || result.description || '';
+      let searchQuery = productName;
+      if (brandName) {
+        const brandLower = brandName.toLowerCase();
+        const productLower = productName.toLowerCase();
+        if (!productLower.includes(brandLower)) {
+          searchQuery = `${brandName} ${productName}`.trim();
+        }
+      }
+
+      console.log(`🛒 Image has clear text — searching shopping for: "${searchQuery}"`);
+      const shoppingResults = await searchShoppingSerpAPI(searchQuery);
+      topResults = (shoppingResults.results || []).slice(0, 3);
+      searchMethod = 'serpapi';
+
+      console.log(`📊 Found ${shoppingResults.results?.length || 0} shopping results`);
+
+      // Filter to brand if available
+      if (topResults.length > 0 && brandName) {
+        const brandLower = brandName.toLowerCase();
+        const beforeCount = topResults.length;
+        topResults = topResults.filter(r => {
+          const storeLower = (r.storeName || '').toLowerCase();
+          const titleLower = (r.title || '').toLowerCase();
+          return storeLower.includes(brandLower) || titleLower.includes(brandLower);
+        });
+        console.log(`🏪 Filtered to "${brandName}" only: ${topResults.length} of ${beforeCount} results`);
       }
     }
-    
-    console.log(`🛒 Searching shopping for: "${searchQuery}"`);
 
-    let shoppingResults = await searchShoppingSerpAPI(searchQuery);
-    let topResults = (shoppingResults.results || []).slice(0, 3);
-    let searchMethod = 'serpapi';
-
-    console.log(`📊 Found ${shoppingResults.results?.length || 0} shopping results`);
-
-    // Filter results to ONLY show items from the specified store (if brand provided)
-    if (topResults.length > 0 && brandName) {
-      const brandLower = brandName.toLowerCase();
-      const beforeCount = topResults.length;
-
-      topResults = topResults.filter(r => {
-        const storeLower = (r.storeName || '').toLowerCase();
-        const titleLower = (r.title || '').toLowerCase();
-        return storeLower.includes(brandLower) || titleLower.includes(brandLower);
-      });
-
-      console.log(`🏪 Filtered to "${brandName}" only: ${topResults.length} of ${beforeCount} results`);
-    }
-
-    // FALLBACK: If text search returned no results, try Google Lens visual matching
+    // If no clear text or text search failed, use Google Lens visual search
     if (topResults.length === 0) {
-      console.log(`⚠️ Text search returned no results — falling back to Google Lens visual search`);
+      console.log(`📷 Using Google Lens for visual product matching`);
       try {
         const googleLensResult = await searchImageViaGoogleLens(imagePath);
         if (googleLensResult.success && googleLensResult.results?.length > 0) {
@@ -302,7 +304,7 @@ router.post('/image', upload.single('image'), async (req, res) => {
           searchMethod = 'google_lens';
         }
       } catch (e) {
-        console.log(`⚠️ Google Lens fallback failed: ${e.message}`);
+        console.log(`❌ Google Lens search failed: ${e.message}`);
       }
     }
 
