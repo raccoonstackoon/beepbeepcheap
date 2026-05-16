@@ -1,22 +1,30 @@
-# SQLite + uploads need a PERSISTENT DISK on Render or data is wiped every deploy.
-# See README → "Saved items disappear after every deploy". Paid instances: add disk + set:
-#   DATABASE_PATH=/var/beepbeep-data/pricetracker.db
-#   UPLOADS_PATH=/var/beepbeep-data/uploads
-# Blueprint example: https://docs.render.com/docs/blueprint-spec#disks
+# Production deployment with persistent disk for data that survives restarts
+# This uses a Starter plan ($7/mo) with a 5GB persistent disk
+# Data stored at /var/beepbeep-data persists across deployments and restarts
 
 services:
   - type: web
     name: beepbeep-api
     runtime: node
-    buildCommand: npm install && cd backend && npx puppeteer browsers install chrome && cd .. && npm run build
+    plan: starter
+    disk:
+      name: beepbeep-data
+      mountPath: /var/beepbeep-data
+      sizeGB: 5
+    buildCommand: npm install --no-optional && cd backend && npx puppeteer browsers install chrome && cd .. && npm run build
     startCommand: npm start
     envVars:
       - key: NODE_ENV
         value: production
-      # Browser origin (CORS + cookies). Must match where users open the app (not the API URL).
       - key: FRONTEND_URL
         value: https://beepbeep.cheap
+      - key: DATABASE_PATH
+        value: /var/beepbeep-data/pricetracker.db
+      - key: UPLOADS_PATH
+        value: /var/beepbeep-data/uploads
       - key: ANTHROPIC_API_KEY
         sync: false
       - key: SERPAPI_KEY
         sync: false
+      - key: npm_config_build_from_source
+        value: "false"
