@@ -2158,7 +2158,7 @@ export async function searchWithBrand(imagePath, brandName) {
  * @param {string} imagePath - Path to the product image file
  * @returns {object} - { success, results: [{ title, price, currency, storeName, productUrl, imageUrl }] }
  */
-export async function searchImageViaGoogleLens(imagePath) {
+export async function searchImageViaGoogleLens(imageUrl) {
   const apiKey = process.env.SERPAPI_KEY;
 
   if (!apiKey) {
@@ -2168,25 +2168,20 @@ export async function searchImageViaGoogleLens(imagePath) {
 
   try {
     console.log(`📷 Google Lens image search via SerpAPI`);
-    console.log(`   Image path: ${imagePath}`);
+    console.log(`   Image URL: ${imageUrl}`);
 
-    // Read the image file and convert to base64
-    const imageBuffer = await fs.promises.readFile(imagePath);
-    const base64Image = imageBuffer.toString('base64');
-    console.log(`   Image size: ${imageBuffer.length} bytes`);
-
-    // Use SerpAPI's Google Lens engine with image
+    // SerpAPI Google Lens requires a publicly accessible image URL (not base64)
     const params = new URLSearchParams({
       engine: 'google_lens',
-      image_base64: base64Image,
+      url: imageUrl,
       api_key: apiKey,
       hl: 'en',
-      gl: 'uk',
+      country: 'uk',
     });
 
-    const url = `https://serpapi.com/search.json?${params}`;
+    const requestUrl = `https://serpapi.com/search.json?${params}`;
     console.log(`   Calling SerpAPI Google Lens...`);
-    const response = await fetch(url, { signal: AbortSignal.timeout(30000) });
+    const response = await fetch(requestUrl, { signal: AbortSignal.timeout(30000) });
 
     if (!response.ok) {
       const body = await response.text();

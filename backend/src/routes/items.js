@@ -207,7 +207,7 @@ router.post('/image', upload.single('image'), async (req, res) => {
     // PRIMARY METHOD: Google Lens visual search (for all photos)
     // ═══════════════════════════════════════════════════════════════════════
     console.log(`📷 Google Lens visual search...`);
-    const googleLensResult = await searchImageViaGoogleLens(imagePath);
+    const googleLensResult = await searchImageViaGoogleLens(imageUrl);
 
     if (googleLensResult.success && googleLensResult.results?.length > 0) {
       console.log(`✅ Found ${googleLensResult.results.length} products`);
