@@ -181,16 +181,14 @@ router.post('/image', upload.single('image'), async (req, res) => {
     if (!req.file) {
       return res.status(400).json({ error: 'Image is required' });
     }
-    
+
     const imagePath = req.file.path;
-    // Create full URL for the uploaded image (not just relative path)
     const host = req.get('host');
     const protocol = req.protocol;
     const imageUrl = `${protocol}://${host}/uploads/${req.file.filename}`;
     const identifyOnly = req.body.identifyOnly === 'true';
     const userProvidedShop = req.body.shopName?.trim() || null;
-    
-    // Parse focus area if provided (from spotlight annotation)
+
     let focusArea = null;
     if (req.body.focusArea) {
       try {
@@ -200,14 +198,39 @@ router.post('/image', upload.single('image'), async (req, res) => {
         console.log(`⚠️ Could not parse focus area: ${e.message}`);
       }
     }
-    
+
     console.log(`📸 Processing product image: ${imagePath}`);
     if (identifyOnly) console.log(`   Mode: Identify only`);
     if (userProvidedShop) console.log(`   User-provided brand: ${userProvidedShop}`);
-    
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // FAST PATH: Try Google Lens first (no text extraction needed)
+    // If it finds results, return those immediately
+    // ═══════════════════════════════════════════════════════════════════════
+    console.log(`📷 Trying Google Lens visual search first...`);
+    const googleLensResult = await searchImageViaGoogleLens(imagePath);
+
+    if (googleLensResult.success && googleLensResult.results?.length > 0) {
+      console.log(`✅ Google Lens found ${googleLensResult.results.length} products! Returning results directly.`);
+      return res.json({
+        extracted: {
+          itemName: googleLensResult.results[0].title,
+          brand: null,
+          searchMethod: 'google_lens'
+        },
+        localImageUrl: imageUrl,
+        shoppingOptions: googleLensResult.results.slice(0, 3),
+        searchQuery: 'visual matching',
+        totalResultsFound: googleLensResult.results.length,
+        searchMethod: 'google_lens',
+      });
+    }
+
     // ═══════════════════════════════════════════════════════════════════════
     // STEP 1: Analyze image with AI to detect brand and identify product
+    // (Only if Google Lens didn't find anything)
     // ═══════════════════════════════════════════════════════════════════════
+    console.log(`⚠️ Google Lens found nothing — analyzing image for text/brand...`);
     const result = await processImage(imagePath, 'product', focusArea);
     
     if (!result.success) {
