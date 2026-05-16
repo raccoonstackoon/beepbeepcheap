@@ -4,7 +4,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import * as queries from '../database/queries.js';
 import { requireUserId } from '../middleware/userId.js';
-import { scrapeProduct, scrapePrice, searchShoppingSerpAPI, searchCostco, getStoreName } from '../services/scraper.js';
+import { scrapeProduct, scrapePrice, searchShoppingSerpAPI, searchCostco, getStoreName, searchWithBrand } from '../services/scraper.js';
 import { processImage } from '../services/imageProcessor.js';
 
 const router = express.Router();
@@ -36,7 +36,7 @@ const upload = multer({
   }
 });
 
-router.use(requireUserId);
+// userId is set by optionalAuth middleware in index.js - no need for strict requirement here
 
 // GET /api/items - Get all tracked items for this user
 router.get('/', (req, res) => {
@@ -270,43 +270,62 @@ router.post('/image', upload.single('image'), async (req, res) => {
     }
     
     console.log(`🛒 Searching shopping for: "${searchQuery}"`);
-    
-    const shoppingResults = await searchShoppingSerpAPI(searchQuery);
-    
+
+    let shoppingResults = await searchShoppingSerpAPI(searchQuery);
+    let topResults = (shoppingResults.results || []).slice(0, 3);
+    let searchMethod = 'serpapi';
+
     console.log(`📊 Found ${shoppingResults.results?.length || 0} shopping results`);
-    
+
     // Filter results to ONLY show items from the specified store (if brand provided)
-    let filteredResults = shoppingResults.results || [];
-    
-    if (brandName) {
+    if (topResults.length > 0 && brandName) {
       const brandLower = brandName.toLowerCase();
-      const beforeCount = filteredResults.length;
-      
-      filteredResults = filteredResults.filter(r => {
+      const beforeCount = topResults.length;
+
+      topResults = topResults.filter(r => {
         const storeLower = (r.storeName || '').toLowerCase();
         const titleLower = (r.title || '').toLowerCase();
         return storeLower.includes(brandLower) || titleLower.includes(brandLower);
       });
-      
-      console.log(`🏪 Filtered to "${brandName}" only: ${filteredResults.length} of ${beforeCount} results`);
+
+      console.log(`🏪 Filtered to "${brandName}" only: ${topResults.length} of ${beforeCount} results`);
     }
-    
-    const topResults = filteredResults.slice(0, 3);
-    
-    for (const r of topResults) {
+
+    // FALLBACK: If text search returned no results or very few results, try visual image search
+    if (topResults.length === 0) {
+      console.log(`⚠️ Text search returned no results — falling back to visual image search`);
+      try {
+        const visualSearchResult = await searchWithBrand(imagePath, brandName || result.itemName);
+        if (visualSearchResult.success && visualSearchResult.productUrl) {
+          console.log(`✅ Visual search found a match!`);
+          topResults = [{
+            title: visualSearchResult.productName || result.itemName,
+            price: visualSearchResult.price,
+            currency: '£',
+            storeName: visualSearchResult.storeName,
+            productUrl: visualSearchResult.productUrl
+          }];
+          searchMethod = 'google_lens';
+        }
+      } catch (e) {
+        console.log(`⚠️ Visual search fallback failed: ${e.message}`);
+      }
+    }
+
+    for (const r of topResults.slice(0, 3)) {
       console.log(`   💰 ${r.currency || '£'}${r.price || 'N/A'} - ${r.title?.substring(0, 50)}... (${r.storeName})`);
     }
-    
+
     res.json({
-      extracted: { 
-        ...result, 
-        brand: brandName || detectedBrand 
+      extracted: {
+        ...result,
+        brand: brandName || detectedBrand
       },
       localImageUrl: imageUrl,
       shoppingOptions: topResults,
       searchQuery: searchQuery,
       totalResultsFound: shoppingResults.results?.length || 0,
-      searchMethod: 'serpapi',
+      searchMethod: searchMethod,
     });
     
   } catch (error) {
