@@ -2152,6 +2152,87 @@ export async function searchWithBrand(imagePath, brandName) {
 }
 
 /**
+ * Search using Google Lens visual matching via SerpAPI
+ * Uploads image and finds visually similar products
+ *
+ * @param {string} imagePath - Path to the product image file
+ * @returns {object} - { success, results: [{ title, price, currency, storeName, productUrl, imageUrl }] }
+ */
+export async function searchImageViaGoogleLens(imagePath) {
+  const apiKey = process.env.SERPAPI_KEY;
+
+  if (!apiKey) {
+    console.warn('⚠️ SERPAPI_KEY not set — cannot use Google Lens image search');
+    return { success: false, error: 'SERPAPI_KEY not configured', results: [] };
+  }
+
+  try {
+    console.log(`📷 Google Lens image search via SerpAPI: ${imagePath}`);
+
+    // Read the image file and convert to base64
+    const imageBuffer = await fs.promises.readFile(imagePath);
+    const base64Image = imageBuffer.toString('base64');
+
+    // Use SerpAPI's Google Lens engine with image
+    const params = new URLSearchParams({
+      engine: 'google_lens',
+      image_base64: base64Image,
+      api_key: apiKey,
+      hl: 'en',
+      gl: 'uk',
+    });
+
+    const url = `https://serpapi.com/search.json?${params}`;
+    const response = await fetch(url, { signal: AbortSignal.timeout(30000) });
+
+    if (!response.ok) {
+      const body = await response.text();
+      console.error(`❌ Google Lens search error ${response.status}: ${body}`);
+      return { success: false, error: `SerpAPI ${response.status}`, results: [] };
+    }
+
+    const data = await response.json();
+    const visualMatches = data.visual_matches || [];
+
+    console.log(`📊 Google Lens found ${visualMatches.length} visual matches`);
+
+    const results = visualMatches
+      .slice(0, 10)
+      .map(item => {
+        // Google Lens returns different structure than shopping
+        const price = item.price?.value ?? null;
+        const title = item.title || item.product_name || 'Unknown Product';
+
+        return {
+          title: title.substring(0, 200),
+          price: price,
+          currency: item.price?.currency || '£',
+          storeName: item.source || item.domain || 'Unknown',
+          productUrl: item.link || item.url || '',
+          imageUrl: item.thumbnail || null,
+        };
+      })
+      .filter(r => r.title && r.productUrl); // Only items with title and URL
+
+    if (results.length > 0) {
+      for (const r of results.slice(0, 3)) {
+        console.log(`   💰 ${r.currency}${r.price?.toFixed(2) || 'N/A'} - ${r.storeName} - ${r.title.substring(0, 40)}...`);
+      }
+    }
+
+    return {
+      success: results.length > 0,
+      results,
+      searchUrl: 'via Google Lens'
+    };
+
+  } catch (error) {
+    console.error('❌ Google Lens search error:', error.message);
+    return { success: false, error: error.message, results: [] };
+  }
+}
+
+/**
  * Search Google Shopping via SerpAPI (reliable API — no browser/CAPTCHA issues).
  * Falls back to Puppeteer-based DuckDuckGo scraping if SERPAPI_KEY is not set.
  *

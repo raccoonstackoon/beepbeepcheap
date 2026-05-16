@@ -4,7 +4,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import * as queries from '../database/queries.js';
 import { requireUserId } from '../middleware/userId.js';
-import { scrapeProduct, scrapePrice, searchShoppingSerpAPI, searchCostco, getStoreName, searchWithBrand } from '../services/scraper.js';
+import { scrapeProduct, scrapePrice, searchShoppingSerpAPI, searchCostco, getStoreName, searchImageViaGoogleLens } from '../services/scraper.js';
 import { processImage } from '../services/imageProcessor.js';
 
 const router = express.Router();
@@ -291,24 +291,18 @@ router.post('/image', upload.single('image'), async (req, res) => {
       console.log(`🏪 Filtered to "${brandName}" only: ${topResults.length} of ${beforeCount} results`);
     }
 
-    // FALLBACK: If text search returned no results or very few results, try visual image search
+    // FALLBACK: If text search returned no results, try Google Lens visual matching
     if (topResults.length === 0) {
-      console.log(`⚠️ Text search returned no results — falling back to visual image search`);
+      console.log(`⚠️ Text search returned no results — falling back to Google Lens visual search`);
       try {
-        const visualSearchResult = await searchWithBrand(imagePath, brandName || result.itemName);
-        if (visualSearchResult.success && visualSearchResult.productUrl) {
-          console.log(`✅ Visual search found a match!`);
-          topResults = [{
-            title: visualSearchResult.productName || result.itemName,
-            price: visualSearchResult.price,
-            currency: '£',
-            storeName: visualSearchResult.storeName,
-            productUrl: visualSearchResult.productUrl
-          }];
+        const googleLensResult = await searchImageViaGoogleLens(imagePath);
+        if (googleLensResult.success && googleLensResult.results?.length > 0) {
+          console.log(`✅ Google Lens found ${googleLensResult.results.length} visually similar products!`);
+          topResults = googleLensResult.results.slice(0, 3);
           searchMethod = 'google_lens';
         }
       } catch (e) {
-        console.log(`⚠️ Visual search fallback failed: ${e.message}`);
+        console.log(`⚠️ Google Lens fallback failed: ${e.message}`);
       }
     }
 
