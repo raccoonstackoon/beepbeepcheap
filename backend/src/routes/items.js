@@ -204,33 +204,26 @@ router.post('/image', upload.single('image'), async (req, res) => {
     if (userProvidedShop) console.log(`   User-provided brand: ${userProvidedShop}`);
 
     // ═══════════════════════════════════════════════════════════════════════
-    // FAST PATH: Try Google Lens first (no text extraction needed)
-    // If it finds results, return those immediately
+    // PRIMARY METHOD: Google Lens visual search (for all photos)
     // ═══════════════════════════════════════════════════════════════════════
-    console.log(`📷 Trying Google Lens visual search first...`);
+    console.log(`📷 Google Lens visual search...`);
     const googleLensResult = await searchImageViaGoogleLens(imagePath);
 
     if (googleLensResult.success && googleLensResult.results?.length > 0) {
-      console.log(`✅ Google Lens found ${googleLensResult.results.length} products! Returning results directly.`);
+      console.log(`✅ Found ${googleLensResult.results.length} products`);
       return res.json({
         extracted: {
           itemName: googleLensResult.results[0].title,
           brand: null,
-          searchMethod: 'google_lens'
         },
         localImageUrl: imageUrl,
         shoppingOptions: googleLensResult.results.slice(0, 3),
-        searchQuery: 'visual matching',
-        totalResultsFound: googleLensResult.results.length,
         searchMethod: 'google_lens',
       });
     }
 
-    // ═══════════════════════════════════════════════════════════════════════
-    // STEP 1: Analyze image with AI to detect brand and identify product
-    // (Only if Google Lens didn't find anything)
-    // ═══════════════════════════════════════════════════════════════════════
-    console.log(`⚠️ Google Lens found nothing — analyzing image for text/brand...`);
+    // FALLBACK: Text-based search (only if Google Lens found nothing)
+    console.log(`⚠️ Google Lens found nothing — trying text-based search...`);
     const result = await processImage(imagePath, 'product', focusArea);
     
     if (!result.success) {
@@ -276,59 +269,34 @@ router.post('/image', upload.single('image'), async (req, res) => {
     }
     
     // ═══════════════════════════════════════════════════════════════════════
-    // STEP 3: Choose search strategy based on text clarity
-    // If image has no clear text, use Google Lens visual matching directly
-    // If image has clear text, use text-based shopping search
+    // STEP 3: Text-based search (fallback from Google Lens)
     // ═══════════════════════════════════════════════════════════════════════
-    const hasGoodTextDetection = detectedBrand || (result.itemName && result.itemName.length > 5);
-    let topResults = [];
-    let searchMethod = 'google_lens'; // Default to visual search
-
-    if (hasGoodTextDetection) {
-      // Text-based search
-      const productName = result.itemName || result.description || '';
-      let searchQuery = productName;
-      if (brandName) {
-        const brandLower = brandName.toLowerCase();
-        const productLower = productName.toLowerCase();
-        if (!productLower.includes(brandLower)) {
-          searchQuery = `${brandName} ${productName}`.trim();
-        }
-      }
-
-      console.log(`🛒 Image has clear text — searching shopping for: "${searchQuery}"`);
-      const shoppingResults = await searchShoppingSerpAPI(searchQuery);
-      topResults = (shoppingResults.results || []).slice(0, 3);
-      searchMethod = 'serpapi';
-
-      console.log(`📊 Found ${shoppingResults.results?.length || 0} shopping results`);
-
-      // Filter to brand if available
-      if (topResults.length > 0 && brandName) {
-        const brandLower = brandName.toLowerCase();
-        const beforeCount = topResults.length;
-        topResults = topResults.filter(r => {
-          const storeLower = (r.storeName || '').toLowerCase();
-          const titleLower = (r.title || '').toLowerCase();
-          return storeLower.includes(brandLower) || titleLower.includes(brandLower);
-        });
-        console.log(`🏪 Filtered to "${brandName}" only: ${topResults.length} of ${beforeCount} results`);
+    const productName = result.itemName || result.description || '';
+    let searchQuery = productName;
+    if (brandName) {
+      const brandLower = brandName.toLowerCase();
+      const productLower = productName.toLowerCase();
+      if (!productLower.includes(brandLower)) {
+        searchQuery = `${brandName} ${productName}`.trim();
       }
     }
 
-    // If no clear text or text search failed, use Google Lens visual search
-    if (topResults.length === 0) {
-      console.log(`📷 Using Google Lens for visual product matching`);
-      try {
-        const googleLensResult = await searchImageViaGoogleLens(imagePath);
-        if (googleLensResult.success && googleLensResult.results?.length > 0) {
-          console.log(`✅ Google Lens found ${googleLensResult.results.length} visually similar products!`);
-          topResults = googleLensResult.results.slice(0, 3);
-          searchMethod = 'google_lens';
-        }
-      } catch (e) {
-        console.log(`❌ Google Lens search failed: ${e.message}`);
-      }
+    console.log(`🛒 Text search for: "${searchQuery}"`);
+    const shoppingResults = await searchShoppingSerpAPI(searchQuery);
+    let topResults = (shoppingResults.results || []).slice(0, 3);
+
+    console.log(`📊 Found ${shoppingResults.results?.length || 0} results`);
+
+    // Filter to brand if available
+    if (topResults.length > 0 && brandName) {
+      const brandLower = brandName.toLowerCase();
+      const beforeCount = topResults.length;
+      topResults = topResults.filter(r => {
+        const storeLower = (r.storeName || '').toLowerCase();
+        const titleLower = (r.title || '').toLowerCase();
+        return storeLower.includes(brandLower) || titleLower.includes(brandLower);
+      });
+      console.log(`🏪 Filtered to "${brandName}": ${topResults.length} of ${beforeCount}`);
     }
 
     for (const r of topResults.slice(0, 3)) {
@@ -342,9 +310,7 @@ router.post('/image', upload.single('image'), async (req, res) => {
       },
       localImageUrl: imageUrl,
       shoppingOptions: topResults,
-      searchQuery: searchQuery,
-      totalResultsFound: shoppingResults.results?.length || 0,
-      searchMethod: searchMethod,
+      searchMethod: 'text_fallback',
     });
     
   } catch (error) {
