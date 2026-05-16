@@ -212,13 +212,10 @@ router.post('/image', upload.single('image'), async (req, res) => {
     if (googleLensResult.success && googleLensResult.results?.length > 0) {
       console.log(`✅ Found ${googleLensResult.results.length} products`);
       return res.json({
-        extracted: {
-          itemName: googleLensResult.results[0].title,
-          brand: null,
-        },
-        localImageUrl: imageUrl,
+        success: true,
         shoppingOptions: googleLensResult.results.slice(0, 3),
         searchMethod: 'google_lens',
+        skipConfirmation: true,
       });
     }
 
