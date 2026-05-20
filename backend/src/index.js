@@ -15,6 +15,7 @@ import rewardsRouter from './routes/rewards.js';
 import pushRouter from './routes/push.js';
 import { startScheduler } from './services/scheduler.js';
 import { initPush } from './services/push.js';
+import { requireUserId } from './middleware/userId.js';
 
 // Load environment variables
 dotenv.config();
@@ -111,7 +112,11 @@ setBroadcastFunction(broadcastPriceDropAlert);
 initPush();
 
 // Routes
-app.use('/api/items', itemsRouter);
+// requireUserId populates req.userId from the X-User-Id header. Without it,
+// every items write would land with NULL user_id and disappear from the owner's list.
+// alerts/rewards routers already apply requireUserId internally; push exposes a
+// public /vapid-key endpoint, so it gates per-route.
+app.use('/api/items', requireUserId, itemsRouter);
 app.use('/api/alerts', alertsRouter);
 app.use('/api/rewards', rewardsRouter);
 app.use('/api/push', pushRouter);
