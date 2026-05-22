@@ -46,7 +46,18 @@ router.get('/diag', requireAdminToken, (req, res) => {
        LIMIT 10`
     )
     .all();
-  res.json({ total, orphans, byUser });
+  const history = db.prepare('SELECT COUNT(*) AS n FROM price_history').get().n;
+  const alerts = db.prepare('SELECT COUNT(*) AS n FROM alerts').get().n;
+  const subs = db.prepare('SELECT COUNT(*) AS n FROM push_subscriptions').get().n;
+  // Pragma queries to reveal which file SQLite actually opened — confirms
+  // whether DATABASE_PATH resolved to the persistent disk or a local fallback.
+  const file = db.prepare('PRAGMA database_list').all();
+  const env = {
+    DATABASE_PATH: process.env.DATABASE_PATH || null,
+    UPLOADS_PATH: process.env.UPLOADS_PATH || null,
+    NODE_ENV: process.env.NODE_ENV || null,
+  };
+  res.json({ total, orphans, byUser, history, alerts, subs, file, env });
 });
 
 // POST /api/admin/recover-orphans
