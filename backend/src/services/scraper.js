@@ -149,27 +149,12 @@ function smartCapitalize(name) {
  */
 export async function scrapeProduct(url) {
   let browser;
-  /** Wall-clock timing per phase (helps debug slow URL paste / preview in logs). */
-  const t0 = Date.now();
-  let segmentStart = t0;
-  const segments = [];
-  const segment = (name) => {
-    const now = Date.now();
-    segments.push({ name, ms: now - segmentStart });
-    segmentStart = now;
-  };
-  const logTimings = (outcome) => {
-    const total = Date.now() - t0;
-    const summary = segments.map((s) => `${s.name}=${s.ms}ms`).join(' | ');
-    console.log(`⏱️ scrapeProduct [${outcome}] total=${total}ms → ${summary}`);
-  };
-
+  
   try {
     console.log(`🔍 Starting scrape for: ${url}`);
     
     browser = await puppeteer.launch(BROWSER_LAUNCH_OPTIONS);
-    segment('puppeteer.launch');
-
+    
     const page = await browser.newPage();
     
     // Set viewport
@@ -193,20 +178,17 @@ export async function scrapeProduct(url) {
         { name: 'HMCORP_locale', value: 'en_US', domain: '.hm.com' },
       );
     }
-    segment('page_setup');
-
+    
     // Navigate to the URL with timeout
     await page.goto(url, { 
       waitUntil: 'domcontentloaded',
       timeout: 45000 
     });
-    segment('page.goto');
-
+    
     // Wait for page to stabilize - longer for fashion sites with more JS
     const fashionSites = ['cos.com', 'hm.com', 'zara.com', 'asos.com', 'stories.com', 'arket.com', 'uniqlo.com'];
     const isFashionSite = fashionSites.some(site => url.includes(site));
     await new Promise(resolve => setTimeout(resolve, isFashionSite ? 5000 : 3000));
-    segment('stabilize_sleep');
     
     // Handle cookie consent and location popups for fashion sites
     if (isFashionSite) {
@@ -343,8 +325,7 @@ export async function scrapeProduct(url) {
         console.log('Error handling popups:', e.message);
       }
     }
-    segment(isFashionSite ? 'fashion_popups' : 'fashion_popups_skipped');
-
+    
     // Get store name from FINAL URL (after all redirects)
     // This handles tracking URLs like duckduckgo, redbrain, etc.
     const finalUrl = page.url();
@@ -368,33 +349,7 @@ export async function scrapeProduct(url) {
     } catch (e) {
       console.log('Scroll nudge skipped:', e.message);
     }
-    segment('scroll_nudge');
-
-    // Costco-specific: wait for member price to load + check for price in attributes
-    if (storeName === 'Costco') {
-      try {
-        // Wait for member price elements
-        await Promise.race([
-          page.waitForSelector('[data-price]', { timeout: 3000 }).catch(() => null),
-          page.waitForSelector('[class*="member"]', { timeout: 3000 }).catch(() => null),
-          new Promise(resolve => setTimeout(resolve, 5000))
-        ]);
-
-        // Try to check for price in the page's JavaScript/data
-        await page.evaluate(() => {
-          // Look for price in window object
-          if (window.__data && window.__data.price) {
-            console.log('Found Costco price in __data:', window.__data.price);
-          }
-          if (window.productData && window.productData.price) {
-            console.log('Found Costco price in productData:', window.productData.price);
-          }
-        });
-
-        console.log('⏳ Checked Costco dynamic content...');
-      } catch (e) {}
-    }
-
+    
     // Extract product information with store-specific and generic strategies
     const productInfo = await page.evaluate((store) => {
       // Helper to clean price string and extract number
@@ -415,16 +370,13 @@ export async function scrapeProduct(url) {
         return null;
       };
       
+      // Stores where JSON-LD structured data is more reliable than DOM selectors
+      const jsonLdPriorityStores = ['LG', 'Lg'];
       
       // Helper to get text content safely
       const getText = (selector) => {
         const el = document.querySelector(selector);
-        if (!el) return null;
-
-        // If element has data-price attribute, use that
-        if (el.dataset.price) return el.dataset.price;
-
-        return el.textContent.trim();
+        return el ? el.textContent.trim() : null;
       };
       
       // Helper to get all matching text
@@ -474,34 +426,30 @@ export async function scrapeProduct(url) {
         return null;
       };
       
-      // Try JSON-LD FIRST. It's stable across DOM redesigns, but on Shopify and
-      // many other stores it ships the *list* price — the actual price the user
-      // pays (after a promo / coupon / sale) is only in the rendered DOM. So we
-      // collect both and reconcile below: if the DOM price is clearly lower
-      // (>=10%), prefer it.
-      let jsonLdPrice = getJsonLdPrice();
-      if (jsonLdPrice) {
-        console.log(`Found JSON-LD price: ${jsonLdPrice}`);
-      }
-
-      // For LG specifically, also try to find price in inline JavaScript/JSON data if JSON-LD failed
-      if (!jsonLdPrice && (store === 'LG' || store === 'Lg')) {
-        try {
+      // For certain stores, prioritize JSON-LD as it's more accurate
+      if (jsonLdPriorityStores.includes(store)) {
+        price = getJsonLdPrice();
+        if (price) {
+          console.log(`Found price from JSON-LD for ${store}: ${price}`);
+        }
+        
+        // For LG specifically, also try to find price in inline JavaScript/JSON data
+        if (!price && (store === 'LG' || store === 'Lg')) {
           const pageHtml = document.documentElement.innerHTML;
           // Look for schema.org Offer pattern: "price":"1749" or "price": "1749"
           const offerMatch = pageHtml.match(/"@type"\s*:\s*"Offer"[^}]*"price"\s*:\s*"?(\d+(?:\.\d+)?)"?/);
           if (offerMatch && offerMatch[1]) {
-            jsonLdPrice = parseFloat(offerMatch[1]);
-            console.log(`Found LG price from inline schema: ${jsonLdPrice}`);
+            price = parseFloat(offerMatch[1]);
+            console.log(`Found LG price from inline schema: ${price}`);
           }
           // Also try GBP price pattern
-          if (!jsonLdPrice) {
+          if (!price) {
             const gbpMatch = pageHtml.match(/"priceCurrency"\s*:\s*"GBP"[^}]*"price"\s*:\s*"?(\d+(?:\.\d+)?)"?/);
             if (gbpMatch && gbpMatch[1]) {
-              jsonLdPrice = parseFloat(gbpMatch[1]);
+              price = parseFloat(gbpMatch[1]);
             }
           }
-        } catch (e) {}
+        }
       }
       
       // Store-specific price selectors
@@ -593,63 +541,22 @@ export async function scrapeProduct(url) {
           '.product-price-current',
           '.current-price',
         ],
-        'Costco': [
-          '[data-price]',
-          '.member-price',
-          '.member-only-price',
-          '[class*="member"]',
-          '.item-price',
-          '.product-price',
-          '.price',
-          '[class*="Price"]',
-          '[class*="price"]',
-        ],
-        'Harrods': [
-          '[data-test="product-price"]',
-          '[class*="ProductPrice"]',
-          '.product-price',
-          '[class*="price"] span',
-          'span[class*="Price"]',
-          '[itemprop="price"]',
-        ],
       };
       
-      // Always try store-specific DOM selectors — even when JSON-LD already
-      // gave us a price — so we can detect a sale/coupon below.
-      let domPrice = null;
-      {
+      // Try store-specific selectors (skip if we already have a price from JSON-LD priority)
+      if (!price) {
         const storeSelectors = storePriceSelectors[store] || [];
         for (const selector of storeSelectors) {
           try {
-            const el = document.querySelector(selector);
-            if (!el) continue;
-
-            // Skip if element is in sidebar, footer, or "related/recommended" sections
-            const container = el.closest('[class*="sidebar"], [class*="related"], [class*="recommended"], [class*="bundle"], footer, .footer');
-            if (container) {
-              console.log(`DEBUG: Skipped (in sidebar/related): selector="${selector}"`);
-              continue;
-            }
-
             const priceText = getText(selector);
             const parsedPrice = cleanPrice(priceText);
             if (parsedPrice && parsedPrice > 0 && parsedPrice < 100000) {
-              domPrice = parsedPrice;
-              console.log(`DEBUG: Found DOM price [${store}] selector="${selector}" → ${domPrice}`);
+              price = parsedPrice;
+              console.log(`Found price with selector ${selector}: ${price}`);
               break;
             }
           } catch (e) {}
         }
-      }
-
-      // Reconcile JSON-LD vs DOM. Shopify and many other stores ship the list
-      // price in JSON-LD while the actual price the user pays (post-promo) is
-      // only rendered in the DOM. Prefer DOM when it's clearly cheaper.
-      if (jsonLdPrice && domPrice && domPrice < jsonLdPrice * 0.9) {
-        price = domPrice;
-        console.log(`Preferring DOM £${domPrice} over JSON-LD £${jsonLdPrice} (>=10% lower, likely sale/promo)`);
-      } else {
-        price = jsonLdPrice || domPrice;
       }
       
       // Generic price selectors as fallback
@@ -670,107 +577,31 @@ export async function scrapeProduct(url) {
           'div[class*="price"]',
           '[class*="Price"]',
         ];
-
-        // Helper to check if text looks like it's NOT a current price
-        const looksLikeOldPrice = (text) => {
-          const lower = (text || '').toLowerCase();
-          const irrelevantPatterns = [
-            'was ', 'was£', 'was$',
-            'original ', 'original£', 'original$',
-            'before ', 'full price',
-            'rrp', 'recommended', 'list price',
-            'from ', 'from£', 'from$', // "from £99.99"
-            'shipping', 'delivery', 'postage',
-            'tax', 'vat',
-            'quantity', 'qty',
-            'per unit', 'each',
-            'now from', // "now from £99"
-          ];
-          return irrelevantPatterns.some(p => lower.includes(p));
-        };
-
-        // Helper to check if a price looks too high (likely an RRP)
-        const looksLikeRRP = (price, contextText = '') => {
-          // If price is in a "from" context or RRP context, it's likely a list price
-          if (contextText.toLowerCase().includes('from') || contextText.toLowerCase().includes('rrp')) {
-            return true;
-          }
-          // Very high prices (>500) without context are suspicious
-          if (price > 500 && !contextText.toLowerCase().includes('bundle') && !contextText.toLowerCase().includes('set')) {
-            return true;
-          }
-          return false;
-        };
-
+        
         for (const selector of genericPriceSelectors) {
           try {
-            // Get all matching elements and try each one
-            const elements = document.querySelectorAll(selector);
-            for (const el of elements) {
-              // Skip if element is in sidebar, footer, or "related/recommended" sections
-              const container = el.closest('[class*="sidebar"], [class*="related"], [class*="recommended"], [class*="bundle"], footer, .footer, [class*="compare"], [class*="similar"]');
-              if (container) {
-                continue;
-              }
-
-              const priceText = el.textContent.trim();
-
-              // Skip if this looks like it's not a current price
-              if (looksLikeOldPrice(priceText)) {
-                continue;
-              }
-
-              const parsedPrice = cleanPrice(priceText);
-              if (parsedPrice && parsedPrice > 0 && parsedPrice < 100000) {
-                price = parsedPrice;
-                console.log(`DEBUG: Found price (generic): selector="${selector}" → ${price}`);
-                break;
-              }
+            const priceText = getText(selector);
+            const parsedPrice = cleanPrice(priceText);
+            if (parsedPrice && parsedPrice > 0 && parsedPrice < 100000) {
+              price = parsedPrice;
+              break;
             }
-            if (price) break;
           } catch (e) {}
         }
       }
       
-      // Try data attributes and JSON embedded in page
-      if (!price) {
-        try {
-          // Check window object for price data (common in e-commerce)
-          if (window.__data?.product?.price) {
-            price = parseFloat(window.__data.product.price);
-          } else if (window.__INITIAL_STATE__?.product?.price) {
-            price = parseFloat(window.__INITIAL_STATE__.product.price);
-          } else if (window.__APOLLO_STATE__) {
-            // Try Apollo GraphQL cache
-            const apolloCache = JSON.stringify(window.__APOLLO_STATE__);
-            const priceMatch = apolloCache.match(/"price[^"]*":"?([\d.]+)/);
-            if (priceMatch) {
-              price = parseFloat(priceMatch[1]);
-            }
-          }
-        } catch (e) {}
-      }
-
       // Try to find price from page text using regex (supports £, $, €)
       if (!price) {
         const bodyText = document.body.innerText;
         const priceMatches = bodyText.match(/[£$€]\s*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/g);
         if (priceMatches && priceMatches.length > 0) {
-          // Collect all reasonable prices
-          const validPrices = [];
+          // Try to find a reasonable price (not too small, not too large)
           for (const match of priceMatches) {
             const parsed = cleanPrice(match);
-            // Skip very small prices (shipping, discounts) and keep range realistic for products
-            if (parsed && parsed >= 1.5 && parsed <= 9999) {
-              validPrices.push(parsed);
+            if (parsed && parsed >= 1 && parsed <= 10000) {
+              price = parsed;
+              break;
             }
-          }
-
-          if (validPrices.length > 0) {
-            // Use FIRST valid price as fallback (selectors should have caught it already)
-            // Skip very small prices that look like shipping/taxes
-            price = validPrices.find(p => p >= 5) || validPrices[0];
-            console.log(`DEBUG: Fallback to page text price: £${price}`);
           }
         }
       }
@@ -1193,8 +1024,8 @@ export async function scrapeProduct(url) {
         return true;
       };
       
-      // Try JSON-LD for images too (it's more reliable than DOM selectors)
-      if (!imageUrl) {
+      // For stores where JSON-LD image is more reliable, try that first
+      if (jsonLdPriorityStores.includes(store)) {
         try {
           const ldJsonElements = document.querySelectorAll('script[type="application/ld+json"]');
           for (const ldJson of ldJsonElements) {
@@ -1206,11 +1037,11 @@ export async function scrapeProduct(url) {
                 const img = Array.isArray(product.image) ? product.image[0] : product.image;
                 if (typeof img === 'string' && img.startsWith('http') && isValidProductImage(img)) {
                   imageUrl = img;
-                  console.log(`Found image from JSON-LD: ${imageUrl}`);
+                  console.log(`Found image from JSON-LD for ${store}: ${imageUrl}`);
                   break;
                 } else if (img?.url && isValidProductImage(img.url)) {
                   imageUrl = img.url;
-                  console.log(`Found image from JSON-LD: ${imageUrl}`);
+                  console.log(`Found image from JSON-LD for ${store}: ${imageUrl}`);
                   break;
                 }
               }
@@ -1239,6 +1070,32 @@ export async function scrapeProduct(url) {
         if (isValidProductImage(twitterImage)) {
           imageUrl = twitterImage;
         }
+      }
+      
+      // Try JSON-LD structured data for image
+      if (!imageUrl) {
+        try {
+          const ldJsonElements = document.querySelectorAll('script[type="application/ld+json"]');
+          for (const ldJson of ldJsonElements) {
+            const data = JSON.parse(ldJson.textContent);
+            const items = Array.isArray(data) ? data : [data];
+            for (const item of items) {
+              const product = item['@type'] === 'Product' ? item : null;
+              if (product?.image) {
+                const img = Array.isArray(product.image) ? product.image[0] : product.image;
+                if (typeof img === 'string' && img.startsWith('http')) {
+                  imageUrl = img;
+                  break;
+                } else if (img?.url) {
+                  imageUrl = img.url;
+                  break;
+                }
+              }
+              if (imageUrl) break;
+            }
+            if (imageUrl) break;
+          }
+        } catch (e) {}
       }
       
       // Final fallback: try to extract name from URL for fashion sites
@@ -1290,31 +1147,16 @@ export async function scrapeProduct(url) {
         }
       }
       
-      // Debug: Check how many prices were found on the page
-      let debugInfo = {};
-      if (price) {
-        const allPriceMatches = document.body.innerText.match(/[£$€]\s*[\d,.]+/g) || [];
-        debugInfo.allPricesOnPage = allPriceMatches;
-        debugInfo.selectedPrice = price;
-      }
-
-      return { name, price, imageUrl, pageTitle: document.title, debugInfo };
+      return { name, price, imageUrl, pageTitle: document.title };
     }, storeName);
-    segment('page.evaluate');
-
+    
     await browser.close();
-    segment('browser.close');
-
+    
     console.log(`✅ Scrape complete:
   - Name: ${productInfo.name?.substring(0, 50)}...
   - Price: ${productInfo.price}
   - Image: ${productInfo.imageUrl ? 'Found' : 'Not found'}
   - Store: ${storeName}`);
-
-    // Debug: Show all prices found on page
-    if (productInfo.debugInfo?.allPricesOnPage?.length > 0) {
-      console.log(`  - All prices on page: ${productInfo.debugInfo.allPricesOnPage.join(', ')}`);
-    }
 
     // Resolve relative image URLs using final page URL (evaluate may miss some cases)
     let resolvedImageUrl = productInfo.imageUrl;
@@ -1389,9 +1231,7 @@ export async function scrapeProduct(url) {
         console.log('Error extracting name from URL:', e.message);
       }
     }
-    segment('post_process');
-
-    logTimings('ok');
+    
     return {
       success: true,
       name: finalName || 'Unknown Product',
@@ -1405,9 +1245,7 @@ export async function scrapeProduct(url) {
     if (browser) {
       await browser.close();
     }
-    segment('error_path');
-    logTimings(`error: ${error.message?.slice(0, 80) || 'unknown'}`);
-
+    
     console.error('❌ Scraping error:', error.message);
     return {
       success: false,
