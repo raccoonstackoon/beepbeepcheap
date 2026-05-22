@@ -13,6 +13,7 @@ import itemsRouter from './routes/items.js';
 import alertsRouter from './routes/alerts.js';
 import rewardsRouter from './routes/rewards.js';
 import pushRouter from './routes/push.js';
+import adminRouter from './routes/admin.js';
 import { startScheduler } from './services/scheduler.js';
 import { initPush } from './services/push.js';
 import { requireUserId } from './middleware/userId.js';
@@ -120,6 +121,7 @@ app.use('/api/items', requireUserId, itemsRouter);
 app.use('/api/alerts', alertsRouter);
 app.use('/api/rewards', rewardsRouter);
 app.use('/api/push', pushRouter);
+app.use('/api/admin', adminRouter);
 
 // Health check with environment diagnostics
 app.get('/api/health', async (req, res) => {
