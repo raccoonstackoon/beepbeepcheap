@@ -149,6 +149,29 @@ router.get('/inspect-disk', requireAdminToken, (req, res) => {
   res.json(out);
 });
 
+// GET /api/admin/schema
+// Dump full sqlite_master so we can confirm tables and indexes exist with
+// the columns the code expects. Read-only.
+router.get('/schema', requireAdminToken, (req, res) => {
+  const db = getDatabase();
+  const objects = db
+    .prepare("SELECT type, name, tbl_name, sql FROM sqlite_master WHERE type IN ('table','index') ORDER BY type, name")
+    .all();
+  const tableCounts = {};
+  const tableInfo = {};
+  for (const o of objects) {
+    if (o.type === 'table') {
+      try {
+        tableCounts[o.name] = db.prepare(`SELECT COUNT(*) AS n FROM "${o.name}"`).get().n;
+        tableInfo[o.name] = db.prepare(`PRAGMA table_info("${o.name}")`).all();
+      } catch (e) {
+        tableCounts[o.name] = `err: ${e.message}`;
+      }
+    }
+  }
+  res.json({ objects, tableCounts, tableInfo });
+});
+
 // POST /api/admin/scan
 // Triggers the same full price-check the daily cron does. Runs async so the
 // HTTP response returns immediately; results land in items/price_history and
