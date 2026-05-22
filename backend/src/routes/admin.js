@@ -1,7 +1,11 @@
 import express from 'express';
 import { triggerPriceCheck } from '../services/scheduler.js';
+import { getDatabase } from '../database/init.js';
 
 const router = express.Router();
+
+const UUID_V4_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 // Constant-time compare to avoid timing attacks on the admin token.
 function tokensMatch(a, b) {
@@ -21,6 +25,48 @@ function requireAdminToken(req, res, next) {
   }
   next();
 }
+
+// GET /api/admin/diag
+// Read-only diagnostic: shows item counts overall, by user_id, and how many
+// are orphaned (NULL user_id). Used to confirm whether items are missing
+// vs. just stuck on the wrong user_id.
+router.get('/diag', requireAdminToken, (req, res) => {
+  const db = getDatabase();
+  const total = db.prepare('SELECT COUNT(*) AS n FROM items').get().n;
+  const orphans = db
+    .prepare("SELECT COUNT(*) AS n FROM items WHERE user_id IS NULL OR user_id = ''")
+    .get().n;
+  const byUser = db
+    .prepare(
+      `SELECT user_id, COUNT(*) AS n
+       FROM items
+       WHERE user_id IS NOT NULL AND user_id != ''
+       GROUP BY user_id
+       ORDER BY n DESC
+       LIMIT 10`
+    )
+    .all();
+  res.json({ total, orphans, byUser });
+});
+
+// POST /api/admin/recover-orphans
+// Reassigns every NULL/empty-user_id item to the supplied target_user_id.
+// Body: { "target_user_id": "<uuid v4>" }
+router.post('/recover-orphans', requireAdminToken, (req, res) => {
+  const target = String(req.body?.target_user_id || '').trim().toLowerCase();
+  if (!UUID_V4_RE.test(target)) {
+    return res.status(400).json({ error: 'target_user_id must be a UUID v4' });
+  }
+  const db = getDatabase();
+  const before = db
+    .prepare("SELECT COUNT(*) AS n FROM items WHERE user_id IS NULL OR user_id = ''")
+    .get().n;
+  const result = db
+    .prepare("UPDATE items SET user_id = ? WHERE user_id IS NULL OR user_id = ''")
+    .run(target);
+  console.log(`[admin] recovered ${result.changes} orphan items → ${target}`);
+  res.json({ ok: true, orphansBefore: before, reassigned: result.changes, target });
+});
 
 // POST /api/admin/scan
 // Triggers the same full price-check the daily cron does. Runs async so the
