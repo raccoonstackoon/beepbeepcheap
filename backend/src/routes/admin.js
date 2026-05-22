@@ -1,4 +1,7 @@
 import express from 'express';
+import fs from 'fs';
+import path from 'path';
+import Database from 'better-sqlite3';
 import { triggerPriceCheck } from '../services/scheduler.js';
 import { getDatabase } from '../database/init.js';
 
@@ -77,6 +80,73 @@ router.post('/recover-orphans', requireAdminToken, (req, res) => {
     .run(target);
   console.log(`[admin] recovered ${result.changes} orphan items → ${target}`);
   res.json({ ok: true, orphansBefore: before, reassigned: result.changes, target });
+});
+
+// GET /api/admin/inspect-disk
+// Lists files on the persistent disk mount and, if a SQLite DB exists at the
+// expected path, opens it read-only and returns row counts. Used to find
+// stranded data when the live code is pointing at the wrong DB file.
+router.get('/inspect-disk', requireAdminToken, (req, res) => {
+  const DISK_ROOT = '/var/beepbeep-data';
+  const out = { mountExists: false, files: [], db: null };
+
+  try {
+    out.mountExists = fs.existsSync(DISK_ROOT);
+    if (out.mountExists) {
+      const entries = fs.readdirSync(DISK_ROOT, { withFileTypes: true });
+      out.files = entries.map((e) => {
+        const full = path.join(DISK_ROOT, e.name);
+        let size = null;
+        let mtime = null;
+        try {
+          const st = fs.statSync(full);
+          size = st.size;
+          mtime = st.mtime.toISOString();
+        } catch {}
+        return { name: e.name, isDir: e.isDirectory(), size, mtime };
+      });
+    }
+
+    const candidateDb = path.join(DISK_ROOT, 'pricetracker.db');
+    if (fs.existsSync(candidateDb)) {
+      const db = new Database(candidateDb, { readonly: true, fileMustExist: true });
+      try {
+        const tables = db
+          .prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+          .all()
+          .map((r) => r.name);
+        const counts = {};
+        for (const t of tables) {
+          try {
+            counts[t] = db.prepare(`SELECT COUNT(*) AS n FROM "${t}"`).get().n;
+          } catch (e) {
+            counts[t] = `err: ${e.message}`;
+          }
+        }
+        const byUser = tables.includes('items')
+          ? db
+              .prepare(
+                `SELECT user_id, COUNT(*) AS n FROM items
+                 WHERE user_id IS NOT NULL AND user_id != ''
+                 GROUP BY user_id ORDER BY n DESC LIMIT 10`
+              )
+              .all()
+          : [];
+        const orphans = tables.includes('items')
+          ? db
+              .prepare("SELECT COUNT(*) AS n FROM items WHERE user_id IS NULL OR user_id = ''")
+              .get().n
+          : 0;
+        out.db = { path: candidateDb, tables, counts, byUser, orphans };
+      } finally {
+        db.close();
+      }
+    }
+  } catch (error) {
+    out.error = error.message;
+  }
+
+  res.json(out);
 });
 
 // POST /api/admin/scan
