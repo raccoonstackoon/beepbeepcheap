@@ -6,6 +6,18 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// In production we MUST have DATABASE_PATH pointed at the persistent disk.
+// Without it, SQLite silently lands in the container filesystem and every
+// redeploy wipes the data. Fail loud instead.
+if (process.env.NODE_ENV === 'production' && !process.env.DATABASE_PATH) {
+  console.error(
+    '[init] FATAL: NODE_ENV=production but DATABASE_PATH is unset. ' +
+    'Set DATABASE_PATH to a path on the persistent disk (e.g. /var/beepbeep-data/pricetracker.db) ' +
+    'or the database will be wiped on every redeploy.'
+  );
+  process.exit(1);
+}
+
 const dbPath = process.env.DATABASE_PATH || path.join(__dirname, '../../data/pricetracker.db');
 
 // Ensure the directory exists (needed for persistent disk mounts on Render)
