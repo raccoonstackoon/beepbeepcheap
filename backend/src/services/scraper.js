@@ -474,28 +474,31 @@ export async function scrapeProduct(url) {
         return null;
       };
       
-      // Try JSON-LD FIRST for all stores (it's more reliable than DOM selectors)
-      // JSON-LD is structured data that doesn't change day-to-day like DOM does
-      price = getJsonLdPrice();
-      if (price) {
-        console.log(`Found JSON-LD price: ${price}`);
+      // Try JSON-LD FIRST. It's stable across DOM redesigns, but on Shopify and
+      // many other stores it ships the *list* price — the actual price the user
+      // pays (after a promo / coupon / sale) is only in the rendered DOM. So we
+      // collect both and reconcile below: if the DOM price is clearly lower
+      // (>=10%), prefer it.
+      let jsonLdPrice = getJsonLdPrice();
+      if (jsonLdPrice) {
+        console.log(`Found JSON-LD price: ${jsonLdPrice}`);
       }
 
       // For LG specifically, also try to find price in inline JavaScript/JSON data if JSON-LD failed
-      if (!price && (store === 'LG' || store === 'Lg')) {
+      if (!jsonLdPrice && (store === 'LG' || store === 'Lg')) {
         try {
           const pageHtml = document.documentElement.innerHTML;
           // Look for schema.org Offer pattern: "price":"1749" or "price": "1749"
           const offerMatch = pageHtml.match(/"@type"\s*:\s*"Offer"[^}]*"price"\s*:\s*"?(\d+(?:\.\d+)?)"?/);
           if (offerMatch && offerMatch[1]) {
-            price = parseFloat(offerMatch[1]);
-            console.log(`Found LG price from inline schema: ${price}`);
+            jsonLdPrice = parseFloat(offerMatch[1]);
+            console.log(`Found LG price from inline schema: ${jsonLdPrice}`);
           }
           // Also try GBP price pattern
-          if (!price) {
+          if (!jsonLdPrice) {
             const gbpMatch = pageHtml.match(/"priceCurrency"\s*:\s*"GBP"[^}]*"price"\s*:\s*"?(\d+(?:\.\d+)?)"?/);
             if (gbpMatch && gbpMatch[1]) {
-              price = parseFloat(gbpMatch[1]);
+              jsonLdPrice = parseFloat(gbpMatch[1]);
             }
           }
         } catch (e) {}
@@ -611,12 +614,13 @@ export async function scrapeProduct(url) {
         ],
       };
       
-      // Try store-specific selectors (skip if we already have a price from JSON-LD priority)
-      if (!price) {
+      // Always try store-specific DOM selectors — even when JSON-LD already
+      // gave us a price — so we can detect a sale/coupon below.
+      let domPrice = null;
+      {
         const storeSelectors = storePriceSelectors[store] || [];
         for (const selector of storeSelectors) {
           try {
-            // Get the first matching element, but check it's in main product area
             const el = document.querySelector(selector);
             if (!el) continue;
 
@@ -630,12 +634,22 @@ export async function scrapeProduct(url) {
             const priceText = getText(selector);
             const parsedPrice = cleanPrice(priceText);
             if (parsedPrice && parsedPrice > 0 && parsedPrice < 100000) {
-              price = parsedPrice;
-              console.log(`DEBUG: Found price [${store}] selector="${selector}" → ${price}`);
+              domPrice = parsedPrice;
+              console.log(`DEBUG: Found DOM price [${store}] selector="${selector}" → ${domPrice}`);
               break;
             }
           } catch (e) {}
         }
+      }
+
+      // Reconcile JSON-LD vs DOM. Shopify and many other stores ship the list
+      // price in JSON-LD while the actual price the user pays (post-promo) is
+      // only rendered in the DOM. Prefer DOM when it's clearly cheaper.
+      if (jsonLdPrice && domPrice && domPrice < jsonLdPrice * 0.9) {
+        price = domPrice;
+        console.log(`Preferring DOM £${domPrice} over JSON-LD £${jsonLdPrice} (>=10% lower, likely sale/promo)`);
+      } else {
+        price = jsonLdPrice || domPrice;
       }
       
       // Generic price selectors as fallback
