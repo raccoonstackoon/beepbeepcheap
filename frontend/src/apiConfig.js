@@ -1,7 +1,9 @@
 import { getOrCreateUserId } from './userId.js';
+import { getAuthToken } from './auth.js';
+import { Capacitor } from '@capacitor/core';
 
 /**
- * JSON/API fetch with X-User-Id (skips Content-Type for FormData).
+ * JSON/API fetch with X-User-Id and optional JWT auth (skips Content-Type for FormData).
  * @param {string} apiBase - from getApiBase(), no trailing slash
  * @param {string} path - e.g. "/items" or "items"
  */
@@ -19,7 +21,17 @@ export function apiFetch(apiBase, path, options = {}) {
       });
     }
   }
-  headers.set('X-User-Id', getOrCreateUserId());
+
+  // Add JWT token if available
+  const token = getAuthToken();
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`);
+  } else {
+    // Fallback to X-User-Id for anonymous users
+    const userId = getOrCreateUserId();
+    console.log('[apiConfig] Sending X-User-Id:', userId);
+    headers.set('X-User-Id', userId);
+  }
 
   if (options.body && typeof options.body === 'string' && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json');
@@ -63,6 +75,10 @@ export function isBeepbeepCheapHost() {
   return h === 'beepbeep.cheap' || h === 'www.beepbeep.cheap';
 }
 
+function isNativeApp() {
+  return Capacitor.isNativePlatform();
+}
+
 /**
  * @returns {string} API base for fetch(), e.g. "https://api.example.com/api" or "/api"
  */
@@ -76,7 +92,9 @@ export function getApiBase() {
   }
 
   if (import.meta.env.PROD) {
-    if (isBeepbeepCheapHost()) {
+    // Capacitor serves the bundled UI from https://localhost, not from the
+    // public domain, so native builds must use the real API explicitly.
+    if (isNativeApp() || isBeepbeepCheapHost()) {
       return `${trimSlash(DEFAULT_SPLIT_DEPLOY_BACKEND)}/api`;
     }
     return '/api';
@@ -104,7 +122,7 @@ export function getWebSocketUrl(apiBase) {
     base = b.startsWith('https://')
       ? `wss://${b.slice('https://'.length)}`
       : `ws://${b.slice('http://'.length)}`;
-  } else if (import.meta.env.PROD && isBeepbeepCheapHost()) {
+  } else if (import.meta.env.PROD && (isNativeApp() || isBeepbeepCheapHost())) {
     base = `wss://${trimSlash(DEFAULT_SPLIT_DEPLOY_BACKEND).replace(/^https:\/\//, '')}`;
   } else {
     const protocol = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:';

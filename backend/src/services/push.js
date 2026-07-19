@@ -1,8 +1,14 @@
 import webpush from 'web-push';
+import apn from 'apn';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { getPushSubscriptionsForUser, removePushSubscription } from '../database/queries.js';
+import {
+  getPushSubscriptionsForUser,
+  removePushSubscription,
+  getNativePushSubscriptionsForUser,
+  removeNativePushSubscription,
+} from '../database/queries.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -10,6 +16,23 @@ const __dirname = path.dirname(__filename);
 const VAPID_PATH = process.env.VAPID_PATH || path.join(__dirname, '../../data/vapid-keys.json');
 
 let vapidKeys = null;
+let apnProvider = null;
+
+function getApnProvider() {
+  if (apnProvider) return apnProvider;
+  const { APNS_KEY_BASE64, APNS_KEY_ID, APNS_TEAM_ID } = process.env;
+  if (!APNS_KEY_BASE64 || !APNS_KEY_ID || !APNS_TEAM_ID) return null;
+
+  apnProvider = new apn.Provider({
+    token: {
+      key: Buffer.from(APNS_KEY_BASE64, 'base64').toString('utf8'),
+      keyId: APNS_KEY_ID,
+      teamId: APNS_TEAM_ID,
+    },
+    production: process.env.APNS_PRODUCTION === 'true',
+  });
+  return apnProvider;
+}
 
 /**
  * Load or generate VAPID keys (used to identify the server to push services).
@@ -81,5 +104,34 @@ async function sendToSubscriptions(subscriptions, payload) {
 export async function sendPushForUser(userId, payload) {
   if (!userId) return;
   const subscriptions = getPushSubscriptionsForUser(userId);
-  await sendToSubscriptions(subscriptions, payload);
+  await Promise.all([
+    sendToSubscriptions(subscriptions, payload),
+    sendNativePushForUser(userId, payload),
+  ]);
+}
+
+async function sendNativePushForUser(userId, payload) {
+  const subscriptions = getNativePushSubscriptionsForUser(userId);
+  if (!subscriptions.length) return;
+
+  const provider = getApnProvider();
+  if (!provider) {
+    console.warn('Native push subscription exists, but APNs is not configured');
+    return;
+  }
+
+  const notification = new apn.Notification();
+  notification.topic = process.env.APNS_BUNDLE_ID || 'cheap.beepbeep.app';
+  notification.alert = { title: payload.title, body: payload.body };
+  notification.sound = 'default';
+  notification.payload = { url: payload.url || '/' };
+
+  const result = await provider.send(notification, subscriptions.map((sub) => sub.token));
+  for (const failure of result.failed || []) {
+    if (['BadDeviceToken', 'Unregistered', 'DeviceTokenNotForTopic'].includes(failure.response?.reason)) {
+      removeNativePushSubscription(failure.device);
+    }
+    console.error('APNs push failed:', failure.response?.reason || failure.error?.message || 'unknown error');
+  }
+  console.log(`📨 Native push sent to ${result.sent?.length || 0} iPhone(s)`);
 }

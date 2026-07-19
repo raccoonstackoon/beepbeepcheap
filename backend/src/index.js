@@ -9,14 +9,15 @@ import { WebSocketServer } from 'ws';
 
 import { initDatabase } from './database/init.js';
 import { setBroadcastFunction } from './database/queries.js';
+import authRouter from './routes/auth.js';
 import itemsRouter from './routes/items.js';
 import alertsRouter from './routes/alerts.js';
 import rewardsRouter from './routes/rewards.js';
 import pushRouter from './routes/push.js';
 import adminRouter from './routes/admin.js';
+import { optionalAuth } from './middleware/auth.js';
 import { startScheduler } from './services/scheduler.js';
 import { initPush } from './services/push.js';
-import { requireUserId } from './middleware/userId.js';
 
 // Load environment variables
 dotenv.config();
@@ -84,10 +85,13 @@ export function broadcastPriceDropAlert(alert, userId) {
 // Middleware
 // Allow all origins in development for local network testing (phone, tablet, etc.)
 app.use(cors({
-  origin: process.env.NODE_ENV === 'production' 
+  origin: process.env.NODE_ENV === 'production'
     ? [
         'https://beepbeep.cheap',
         'https://www.beepbeep.cheap',
+        // Capacitor's iOS WebView serves its bundled UI from this origin.
+        'https://localhost',
+        'capacitor://localhost',
         process.env.FRONTEND_URL
       ].filter(Boolean)
     : true, // Allow all origins in development
@@ -95,6 +99,18 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'X-User-Id'],
 }));
 app.use(express.json());
+
+// Request logging middleware (development only)
+if (process.env.NODE_ENV !== 'production') {
+  app.use((req, res, next) => {
+    const xUserId = req.headers['x-user-id'];
+    const auth = req.headers.authorization;
+    if (req.path.startsWith('/api/')) {
+      console.log(`[${new Date().toISOString()}] ${req.method} ${req.path} | auth: ${auth ? 'Bearer' : 'none'} | x-user-id: ${xUserId || 'missing'}`);
+    }
+    next();
+  });
+}
 
 // Serve uploaded images (configurable for persistent disk on hosted platforms)
 const uploadsPath = process.env.UPLOADS_PATH || path.join(__dirname, '../uploads');
@@ -113,14 +129,11 @@ setBroadcastFunction(broadcastPriceDropAlert);
 initPush();
 
 // Routes
-// requireUserId populates req.userId from the X-User-Id header. Without it,
-// every items write would land with NULL user_id and disappear from the owner's list.
-// alerts/rewards routers already apply requireUserId internally; push exposes a
-// public /vapid-key endpoint, so it gates per-route.
-app.use('/api/items', requireUserId, itemsRouter);
-app.use('/api/alerts', alertsRouter);
-app.use('/api/rewards', rewardsRouter);
-app.use('/api/push', pushRouter);
+app.use('/api/auth', authRouter);
+app.use('/api/items', optionalAuth, itemsRouter);
+app.use('/api/alerts', optionalAuth, alertsRouter);
+app.use('/api/rewards', optionalAuth, rewardsRouter);
+app.use('/api/push', optionalAuth, pushRouter);
 app.use('/api/admin', adminRouter);
 
 // Health check with environment diagnostics
@@ -153,17 +166,43 @@ app.get('/api/health', async (req, res) => {
     puppeteerCacheContents = e.message;
   }
 
+  const resolvedDbPath =
+    process.env.DATABASE_PATH || path.join(__dirname, '../data/pricetracker.db');
+  const resolvedUploadsPath =
+    process.env.UPLOADS_PATH || path.join(__dirname, '../uploads');
+  let dbFileInfo = { path: resolvedDbPath, exists: false, bytes: null, onPersistentDisk: null };
+  try {
+    dbFileInfo.exists = fs.existsSync(resolvedDbPath);
+    if (dbFileInfo.exists) {
+      dbFileInfo.bytes = fs.statSync(resolvedDbPath).size;
+    }
+    if (resolvedDbPath.startsWith('/var/beepbeep-data')) {
+      dbFileInfo.onPersistentDisk = true;
+    } else if (resolvedDbPath.includes('/opt/render/project') || resolvedDbPath.includes('/data/')) {
+      dbFileInfo.onPersistentDisk = false;
+    }
+  } catch (e) {
+    dbFileInfo.error = e.message;
+  }
+
   res.json({
     status: 'ok',
     timestamp: new Date().toISOString(),
     env: {
       NODE_ENV: process.env.NODE_ENV,
       HOME: process.env.HOME,
+      DATABASE_PATH: process.env.DATABASE_PATH || '(default backend/data/pricetracker.db)',
+      UPLOADS_PATH: process.env.UPLOADS_PATH || '(default backend/uploads)',
       PUPPETEER_EXECUTABLE_PATH: process.env.PUPPETEER_EXECUTABLE_PATH || '(not set)',
       PUPPETEER_SKIP_DOWNLOAD: process.env.PUPPETEER_SKIP_DOWNLOAD || '(not set)',
       PUPPETEER_CACHE_DIR: process.env.PUPPETEER_CACHE_DIR || '(not set)',
       SERPAPI_KEY: process.env.SERPAPI_KEY ? '✅ set' : '❌ not set',
       ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY ? '✅ set' : '❌ not set',
+    },
+    database: dbFileInfo,
+    uploadsDir: {
+      path: resolvedUploadsPath,
+      exists: fs.existsSync(resolvedUploadsPath),
     },
     chrome: chromeStatus,
     puppeteerCache: puppeteerCacheContents,
@@ -219,6 +258,18 @@ if (process.env.NODE_ENV !== 'production') {
   });
 }
 
+// Debug endpoint to see what headers are being sent (development only)
+if (process.env.NODE_ENV !== 'production') {
+  app.get('/api/debug/headers', (req, res) => {
+    console.log('🐛 Debug endpoint - received headers:', req.headers);
+    res.json({
+      headers: req.headers,
+      query: req.query,
+      message: 'Check console for details'
+    });
+  });
+}
+
 // Manual trigger for price checks (used by external cron services)
 app.post('/api/cron/check-prices', async (req, res) => {
   const { checkAllPrices } = await import('./services/scheduler.js');
@@ -247,8 +298,6 @@ server.listen(PORT, '0.0.0.0', () => {
   // Start the daily price check scheduler
   startScheduler();
 });
-
-
 
 
 

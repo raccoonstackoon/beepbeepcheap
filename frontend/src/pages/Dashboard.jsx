@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { 
-  Bell, 
-  RefreshCw, 
-  TrendingUp, 
+import {
+  Bell,
+  BellRing,
+  RefreshCw,
+  TrendingUp,
   Minus,
   Plus,
   Camera,
@@ -21,6 +22,7 @@ import hyraxImage from '../assets/hyrax.png';
 import raccoonImage from '../assets/raccoon.png';
 import './Dashboard.css';
 import { apiFetch } from '../apiConfig.js';
+import { enablePushNotifications, getPushNotificationStatus } from '../pushNotifications.js';
 
 export default function Dashboard({ items, alerts, onRefresh, apiBase }) {
   const [showAddModal, setShowAddModal] = useState(false);
@@ -41,6 +43,24 @@ export default function Dashboard({ items, alerts, onRefresh, apiBase }) {
   // Rewards state
   const [rewards, setRewards] = useState(null);
   const [rewardToast, setRewardToast] = useState(null); // { message, coins }
+  const [pushStatus, setPushStatus] = useState(getPushNotificationStatus());
+  const [enablingPush, setEnablingPush] = useState(false);
+
+  const handleEnableNotifications = async () => {
+    setEnablingPush(true);
+    try {
+      const result = await enablePushNotifications();
+      setPushStatus(result.status);
+      if (result.status === 'enabled') showRewardToast('Price alerts enabled!', 0);
+      if (result.status === 'denied') alert('Notifications are blocked. Enable them in your iPhone Settings, then reopen beepbeep.cheap.');
+      if (result.status === 'unavailable') alert('Notifications need Safari on iPhone with beepbeep.cheap added to your Home Screen.');
+    } catch (error) {
+      console.error('Failed to enable notifications:', error);
+      alert('Could not enable notifications. Please try again in a moment.');
+    } finally {
+      setEnablingPush(false);
+    }
+  };
 
   // Calculate stats (moved up so they can be used in effects)
   const totalItems = items.length;
@@ -230,18 +250,18 @@ export default function Dashboard({ items, alerts, onRefresh, apiBase }) {
       const caughtMascot = fallingMascots.find(m => m.id === mascotId);
       const res = await apiFetch(apiBase, '/rewards/catch', { method: 'POST' });
       const data = await res.json();
-      
+
       setRewards(data.rewards);
-      
+
       // Show opaque "caught" overlay
       setGiantCaught({
         type: caughtMascot?.type || 'raccoon',
         coins: data.coinsEarned
       });
-      
+
       // Remove the caught mascot immediately
       setFallingMascots(prev => prev.filter(m => m.id !== mascotId));
-      
+
       // Dismiss overlay after animation
       setTimeout(() => {
         setGiantCaught(null);
@@ -338,7 +358,18 @@ export default function Dashboard({ items, alerts, onRefresh, apiBase }) {
                 <span className="badge-modern">{alerts.length}</span>
               )}
             </button>
-            <button 
+            {pushStatus !== 'enabled' && (
+              <button
+                className="btn-modern btn-modern-secondary"
+                onClick={handleEnableNotifications}
+                disabled={enablingPush}
+                aria-label="Enable price alerts"
+              >
+                <BellRing size={16} />
+                <span>{enablingPush ? 'Enabling…' : 'Enable alerts'}</span>
+              </button>
+            )}
+            <button
               className="btn-modern btn-modern-secondary"
               onClick={handleRefreshAll}
               disabled={refreshing}

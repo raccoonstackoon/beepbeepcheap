@@ -1,0 +1,43 @@
+# ---------------------------------------------------------------------------
+# OPTIONAL: Persistent SQLite + uploads (survives deploys & spin-down restarts)
+# ---------------------------------------------------------------------------
+# Render explicitly does NOT allow persistent disks on the FREE instance type.
+# From https://render.com/docs/free :
+#   "Free web services cannot" attach persistent disks.
+# Hobby workspace ($0/month) is fine — you still need a PAID INSTANCE (e.g. Starter ~$7/mo)
+# plus disk storage (~$0.25/GB/mo per Render pricing).
+#
+# To use this file:
+# 1. Replace the contents of render.yaml with this file, OR merge these fields in Dashboard:
+#    - Instance: Starter (or higher)
+#    - Disks: mount path /var/beepbeep-data, size as needed
+#    - Env: DATABASE_PATH, UPLOADS_PATH below
+# 2. Deploy. Add a payment method in Render if prompted.
+# ---------------------------------------------------------------------------
+
+services:
+  - type: web
+    name: beepbeep-api
+    runtime: node
+    plan: starter
+    disk:
+      name: beepbeep-data
+      mountPath: /var/beepbeep-data
+      sizeGB: 5
+    buildCommand: npm install && cd backend && npx puppeteer browsers install chrome && cd .. && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: FRONTEND_URL
+        value: https://beepbeep.cheap
+      - key: DATABASE_PATH
+        value: /var/beepbeep-data/pricetracker.db
+      - key: UPLOADS_PATH
+        value: /var/beepbeep-data/uploads
+      - key: VAPID_PATH
+        value: /var/beepbeep-data/vapid-keys.json
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: SERPAPI_KEY
+        sync: false

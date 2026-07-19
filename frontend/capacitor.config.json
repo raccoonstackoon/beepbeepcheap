@@ -1,0 +1,13 @@
+{
+  "appId": "cheap.beepbeep.app",
+  "appName": "beepbeep.cheap",
+  "webDir": "dist",
+  "server": {
+    "iosScheme": "https"
+  },
+  "plugins": {
+    "PushNotifications": {
+      "presentationOptions": ["badge", "sound", "banner", "list"]
+    }
+  }
+}

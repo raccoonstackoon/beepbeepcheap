@@ -284,6 +284,25 @@ export function getPushSubscriptionsForUser(userId) {
   return db.prepare('SELECT * FROM push_subscriptions WHERE user_id = ?').all(userId);
 }
 
+export function saveNativePushSubscription(token, platform, userId) {
+  const db = getDatabase();
+  db.prepare(`
+    INSERT INTO native_push_subscriptions (token, platform, user_id)
+    VALUES (?, ?, ?)
+    ON CONFLICT(token) DO UPDATE SET platform = excluded.platform, user_id = excluded.user_id
+  `).run(token, platform, userId);
+}
+
+export function getNativePushSubscriptionsForUser(userId) {
+  const db = getDatabase();
+  return db.prepare('SELECT * FROM native_push_subscriptions WHERE user_id = ?').all(userId);
+}
+
+export function removeNativePushSubscription(token) {
+  const db = getDatabase();
+  db.prepare('DELETE FROM native_push_subscriptions WHERE token = ?').run(token);
+}
+
 // ============ REWARDS (per user) ============
 
 function ensureUserRewardsRow(userId) {
@@ -410,4 +429,71 @@ export function claimMilestone(userId, type) {
     coinsEarned: milestone.coins,
     rewards: getRewards(userId),
   };
+}
+
+// ============ USERS (OAuth) ============
+
+export function createUser(id, email, provider, providerId) {
+  const db = getDatabase();
+  const result = db
+    .prepare(
+      `
+    INSERT INTO users (id, email, provider, provider_id)
+    VALUES (?, ?, ?, ?)
+  `
+    )
+    .run(id, email, provider, providerId);
+  return result.changes > 0;
+}
+
+export function getUserByOAuth(provider, providerId) {
+  const db = getDatabase();
+  return db
+    .prepare('SELECT * FROM users WHERE provider = ? AND provider_id = ?')
+    .get(provider, providerId);
+}
+
+export function getUserById(userId) {
+  const db = getDatabase();
+  return db.prepare('SELECT * FROM users WHERE id = ?').get(userId);
+}
+
+export function getUserByEmail(email) {
+  const db = getDatabase();
+  return db.prepare('SELECT * FROM users WHERE email = ?').get(email);
+}
+
+export function migrateGuestData(guestUserId, targetUserId) {
+  const db = getDatabase();
+
+  // Move all items to the target user
+  db.prepare(`UPDATE items SET user_id = ? WHERE user_id = ?`).run(targetUserId, guestUserId);
+
+  // Merge rewards: add guest coins, take best streaks, combine milestones
+  const guest = db.prepare(`SELECT * FROM user_rewards WHERE user_id = ?`).get(guestUserId);
+  if (guest) {
+    ensureUserRewardsRow(targetUserId);
+    db.prepare(`
+      UPDATE user_rewards SET
+        coins = coins + ?,
+        streak_current = MAX(streak_current, ?),
+        streak_best = MAX(streak_best, ?),
+        giants_caught = giants_caught + ?,
+        first_item_claimed = MAX(first_item_claimed, ?),
+        savings_10_claimed = MAX(savings_10_claimed, ?),
+        savings_50_claimed = MAX(savings_50_claimed, ?),
+        savings_100_claimed = MAX(savings_100_claimed, ?)
+      WHERE user_id = ?
+    `).run(
+      guest.coins,
+      guest.streak_current,
+      guest.streak_best,
+      guest.giants_caught,
+      guest.first_item_claimed,
+      guest.savings_10_claimed,
+      guest.savings_50_claimed,
+      guest.savings_100_claimed,
+      targetUserId
+    );
+  }
 }

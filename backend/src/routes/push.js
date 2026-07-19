@@ -1,5 +1,5 @@
 import express from 'express';
-import { savePushSubscription, removePushSubscription } from '../database/queries.js';
+import { savePushSubscription, removePushSubscription, saveNativePushSubscription } from '../database/queries.js';
 import { getPublicVapidKey } from '../services/push.js';
 import { requireUserId } from '../middleware/userId.js';
 
@@ -26,6 +26,20 @@ router.post('/subscribe', requireUserId, (req, res) => {
   } catch (err) {
     console.error('Failed to save push subscription:', err);
     res.status(500).json({ error: 'Could not save subscription' });
+  }
+});
+
+// POST /api/push/native/subscribe — store an APNs token from the TestFlight app.
+router.post('/native/subscribe', requireUserId, (req, res) => {
+  const { token, platform } = req.body || {};
+  if (!token || platform !== 'ios') return res.status(400).json({ error: 'Invalid native push token' });
+
+  try {
+    saveNativePushSubscription(token, platform, req.userId);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Failed to save native push subscription:', err);
+    res.status(500).json({ error: 'Could not save native push subscription' });
   }
 });
 

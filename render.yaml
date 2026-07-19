@@ -22,6 +22,8 @@ services:
         value: /var/beepbeep-data/pricetracker.db
       - key: UPLOADS_PATH
         value: /var/beepbeep-data/uploads
+      - key: VAPID_PATH
+        value: /var/beepbeep-data/vapid-keys.json
       - key: ANTHROPIC_API_KEY
         sync: false
       - key: SERPAPI_KEY

@@ -6,14 +6,14 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// In production we MUST have DATABASE_PATH pointed at the persistent disk.
-// Without it, SQLite silently lands in the container filesystem and every
-// redeploy wipes the data. Fail loud instead.
+// Production SQLite must live on Render's persistent disk. Failing at startup
+// is safer than silently creating an ephemeral database that disappears on the
+// next deploy.
 if (process.env.NODE_ENV === 'production' && !process.env.DATABASE_PATH) {
   console.error(
     '[init] FATAL: NODE_ENV=production but DATABASE_PATH is unset. ' +
-    'Set DATABASE_PATH to a path on the persistent disk (e.g. /var/beepbeep-data/pricetracker.db) ' +
-    'or the database will be wiped on every redeploy.'
+    'Set DATABASE_PATH to a path on the persistent disk (for example ' +
+    '/var/beepbeep-data/pricetracker.db).'
   );
   process.exit(1);
 }
@@ -104,6 +104,18 @@ export function initDatabase() {
     )
   `);
 
+  // Native iOS device tokens (APNs). Kept separately from browser Web Push
+  // subscriptions because APNs accepts a device token, not a VAPID endpoint.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS native_push_subscriptions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      token TEXT NOT NULL UNIQUE,
+      platform TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
   // Create indexes for better query performance
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_price_history_item_id ON price_history(item_id);
@@ -133,6 +145,22 @@ export function initDatabase() {
   `);
 
   migratePerUserData(db);
+
+  // Create users table for OAuth authentication
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      email TEXT,
+      provider TEXT NOT NULL,
+      provider_id TEXT NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(provider, provider_id)
+    )
+  `);
+
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_users_provider ON users(provider, provider_id)`);
 
   console.log('✅ Database initialized successfully');
 }
@@ -199,5 +227,5 @@ function migratePerUserData(db) {
 
   db.exec(`CREATE INDEX IF NOT EXISTS idx_items_user_id ON items(user_id)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_push_subscriptions_user_id ON push_subscriptions(user_id)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_native_push_subscriptions_user_id ON native_push_subscriptions(user_id)`);
 }
-
