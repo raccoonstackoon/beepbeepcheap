@@ -301,6 +301,7 @@ router.post('/image', upload.single('image'), async (req, res) => {
     });
 
     const topResults = await resolveMerchantOffers(filteredResults.slice(0, 3));
+    topResults.sort((a, b) => (Number(a.price) || Number.POSITIVE_INFINITY) - (Number(b.price) || Number.POSITIVE_INFINITY));
     
     for (const r of topResults) {
       console.log(`   💰 ${r.currency || '£'}${r.price || 'N/A'} - ${r.title?.substring(0, 50)}... (${r.storeName})`);
@@ -408,6 +409,11 @@ router.post('/search', async (req, res) => {
     // Resolve only the visible top three results. Backup results remain cheap
     // search metadata until a future request promotes them.
     topResults = await resolveMerchantOffers(topResults);
+    topResults.sort((a, b) => {
+      if (b.idMatchCount !== a.idMatchCount) return b.idMatchCount - a.idMatchCount;
+      if (b.specMatchCount !== a.specMatchCount) return b.specMatchCount - a.specMatchCount;
+      return (Number(a.price) || Number.POSITIVE_INFINITY) - (Number(b.price) || Number.POSITIVE_INFINITY);
+    });
     backupResults = backupResults.map(({ serpapiProductApi, ...result }) => result);
 
     for (const r of topResults) {
