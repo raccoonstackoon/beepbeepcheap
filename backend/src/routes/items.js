@@ -291,6 +291,15 @@ router.post('/image', upload.single('image'), async (req, res) => {
       console.log(`🏪 Filtered to "${brandName}" only: ${filteredResults.length} of ${beforeCount} results`);
     }
     
+    // Claude/Google can return the same product from several merchants in an
+    // arbitrary order. Once the brand/product filter has established
+    // relevance, put the cheapest valid offer first.
+    filteredResults.sort((a, b) => {
+      const aPrice = Number(a.price) || Number.POSITIVE_INFINITY;
+      const bPrice = Number(b.price) || Number.POSITIVE_INFINITY;
+      return aPrice - bPrice;
+    });
+
     const topResults = filteredResults.slice(0, 3);
     
     for (const r of topResults) {
@@ -938,4 +947,3 @@ router.get('/:id/alternatives', async (req, res) => {
 });
 
 export default router;
-

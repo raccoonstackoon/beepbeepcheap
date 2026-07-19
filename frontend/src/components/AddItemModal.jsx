@@ -451,10 +451,17 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
         return url || '';
       };
 
-      const main = optionsList[0];
+      // The card's primary URL and price must always represent the cheapest
+      // relevant offer selected, regardless of checkbox/click order.
+      const rankedOptions = [...optionsList].sort((a, b) => {
+        const aPrice = Number(a.price) || Number.POSITIVE_INFINITY;
+        const bPrice = Number(b.price) || Number.POSITIVE_INFINITY;
+        return aPrice - bPrice;
+      });
+      const main = rankedOptions[0];
       const mainImageUrl = fixUrl(main.imageUrl || identifiedProduct?.localImageUrl || '');
 
-      const trackedSources = optionsList.map((opt) => ({
+      const trackedSources = rankedOptions.map((opt) => ({
         title: (opt.title || '').trim(),
         url: opt.productUrl || null,
         imageUrl: fixUrl(opt.imageUrl || ''),
@@ -1151,4 +1158,3 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
     </div>
   );
 }
-

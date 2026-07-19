@@ -2182,7 +2182,10 @@ export async function searchShoppingSerpAPI(searchQuery) {
           price,
           currency: '£',
           storeName: item.source || 'Unknown',
-          productUrl: item.product_link || item.link || '',
+          // `product_link` opens Google's comparison page. Prefer the
+          // merchant-specific offer link so saved items land on the seller
+          // that actually advertised this price and can be monitored later.
+          productUrl: item.link || item.product_link || '',
           imageUrl: item.thumbnail || null,
         };
       })
