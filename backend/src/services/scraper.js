@@ -67,6 +67,52 @@ const BROWSER_LAUNCH_OPTIONS = {
   ]
 };
 
+function isLikelyProductImageUrl(value, pageUrl) {
+  if (!value) return false;
+  try {
+    const parsed = new URL(value, pageUrl);
+    const path = parsed.pathname.toLowerCase();
+    if (!['http:', 'https:'].includes(parsed.protocol)) return false;
+    if (!path || path === '/') return false;
+    if (/\.(svg|ico)(?:$|\?)/i.test(parsed.href)) return false;
+    if (/(?:logo|icon|favicon|pixel|spacer)(?:[._/-]|$)/i.test(path)) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function getShopifyProductImage(pageUrl) {
+  try {
+    const parsed = new URL(pageUrl);
+    const productMatch = parsed.pathname.match(/^\/products\/([^/]+)/i);
+    if (!productMatch) return null;
+
+    const productJsonUrl = new URL(`/products/${productMatch[1]}.js`, parsed.origin);
+    const response = await fetch(productJsonUrl, {
+      headers: { Accept: 'application/json' },
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!response.ok) return null;
+
+    const product = await response.json();
+    const selectedVariantId = parsed.searchParams.get('variant');
+    const selectedVariant = selectedVariantId
+      ? product.variants?.find((variant) => String(variant.id) === selectedVariantId)
+      : null;
+    const candidate = selectedVariant?.featured_image?.src
+      || selectedVariant?.featured_image
+      || product.featured_image
+      || product.images?.[0];
+    if (!candidate) return null;
+
+    const absolute = String(candidate).startsWith('//') ? `https:${candidate}` : new URL(candidate, parsed.origin).href;
+    return isLikelyProductImageUrl(absolute, pageUrl) ? absolute : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Extract store name from URL - DYNAMIC approach
  * Extracts the brand/store name from the domain, handles edge cases
@@ -390,6 +436,26 @@ export async function scrapeProduct(url) {
         const el = document.querySelector(selector);
         return el ? el.getAttribute(attr) : null;
       };
+
+      // Product schema is frequently nested inside @graph/mainEntity rather
+      // than being the top-level JSON-LD object.
+      const getJsonLdProducts = () => {
+        const products = [];
+        const visit = (value) => {
+          if (!value || typeof value !== 'object') return;
+          if (Array.isArray(value)) {
+            value.forEach(visit);
+            return;
+          }
+          const types = Array.isArray(value['@type']) ? value['@type'] : [value['@type']];
+          if (types.includes('Product')) products.push(value);
+          Object.values(value).forEach(visit);
+        };
+        document.querySelectorAll('script[type="application/ld+json"]').forEach((script) => {
+          try { visit(JSON.parse(script.textContent)); } catch { /* malformed schema */ }
+        });
+        return products;
+      };
       
       // ========== PRICE EXTRACTION ==========
       let price = null;
@@ -398,24 +464,18 @@ export async function scrapeProduct(url) {
       // Prefers GBP offers; falls back to first available price
       const getJsonLdPrice = () => {
         try {
-          const ldJsonElements = document.querySelectorAll('script[type="application/ld+json"]');
           let fallbackPrice = null;
-          for (const ldJson of ldJsonElements) {
-            const data = JSON.parse(ldJson.textContent);
-            const items = Array.isArray(data) ? data : [data];
-            for (const item of items) {
-              const product = item['@type'] === 'Product' ? item : null;
-              if (product?.offers) {
-                const offers = Array.isArray(product.offers) ? product.offers : [product.offers];
-                for (const offer of offers) {
-                  if (offer.price) {
-                    const currency = (offer.priceCurrency || '').toUpperCase();
-                    if (currency === 'GBP') {
-                      return parseFloat(offer.price);
-                    }
-                    if (fallbackPrice === null) {
-                      fallbackPrice = parseFloat(offer.price);
-                    }
+          for (const product of getJsonLdProducts()) {
+            if (product?.offers) {
+              const offers = Array.isArray(product.offers) ? product.offers : [product.offers];
+              for (const offer of offers) {
+                if (offer.price) {
+                  const currency = (offer.priceCurrency || '').toUpperCase();
+                  if (currency === 'GBP') {
+                    return parseFloat(offer.price);
+                  }
+                  if (fallbackPrice === null) {
+                    fallbackPrice = parseFloat(offer.price);
                   }
                 }
               }
@@ -617,27 +677,7 @@ export async function scrapeProduct(url) {
       
       // Try JSON-LD structured data for price
       if (!price) {
-        try {
-          const ldJsonElements = document.querySelectorAll('script[type="application/ld+json"]');
-          for (const ldJson of ldJsonElements) {
-            const data = JSON.parse(ldJson.textContent);
-            const items = Array.isArray(data) ? data : [data];
-            for (const item of items) {
-              const product = item['@type'] === 'Product' ? item : null;
-              if (product?.offers) {
-                const offers = Array.isArray(product.offers) ? product.offers : [product.offers];
-                for (const offer of offers) {
-                  if (offer.price) {
-                    price = parseFloat(offer.price);
-                    break;
-                  }
-                }
-              }
-              if (price) break;
-            }
-            if (price) break;
-          }
-        } catch (e) {}
+        price = getJsonLdPrice();
       }
       
       // ========== NAME EXTRACTION ==========
@@ -777,21 +817,8 @@ export async function scrapeProduct(url) {
       
       // Also try product schema
       if (isInvalidName(name)) {
-        try {
-          const ldJsonElements = document.querySelectorAll('script[type="application/ld+json"]');
-          for (const ldJson of ldJsonElements) {
-            const data = JSON.parse(ldJson.textContent);
-            const items = Array.isArray(data) ? data : [data];
-            for (const item of items) {
-              const product = item['@type'] === 'Product' ? item : null;
-              if (product?.name && !isInvalidName(product.name)) {
-                name = product.name;
-                break;
-              }
-            }
-            if (!isInvalidName(name)) break;
-          }
-        } catch (e) {}
+        const schemaProduct = getJsonLdProducts().find((product) => product?.name && !isInvalidName(product.name));
+        if (schemaProduct) name = schemaProduct.name;
       }
       
       // ========== IMAGE EXTRACTION ==========
@@ -969,6 +996,8 @@ export async function scrapeProduct(url) {
       if (!imageUrl) {
         const genericImageSelectors = [
           'img[itemprop="image"]',
+          'img[data-image-id]',
+          'main img[src*="/cdn/shop/files/"]',
           '.product-image img',
           '.main-image img',
           '[class*="product"] img',
@@ -996,7 +1025,14 @@ export async function scrapeProduct(url) {
       // Helper to check if an image URL is likely a product image (not a logo/icon/banner)
       const isValidProductImage = (url) => {
         if (!url) return false;
-        const lowerUrl = url.toLowerCase();
+        let parsed;
+        try {
+          parsed = new URL(url, location.href);
+        } catch {
+          return false;
+        }
+        if (!parsed.pathname || parsed.pathname === '/') return false;
+        const lowerUrl = parsed.href.toLowerCase();
         // Filter out obvious logos and icons
         if (lowerUrl.includes('logo') || lowerUrl.includes('icon') || lowerUrl.includes('.svg')) {
           return false;
@@ -1075,23 +1111,11 @@ export async function scrapeProduct(url) {
       // Try JSON-LD structured data for image
       if (!imageUrl) {
         try {
-          const ldJsonElements = document.querySelectorAll('script[type="application/ld+json"]');
-          for (const ldJson of ldJsonElements) {
-            const data = JSON.parse(ldJson.textContent);
-            const items = Array.isArray(data) ? data : [data];
-            for (const item of items) {
-              const product = item['@type'] === 'Product' ? item : null;
-              if (product?.image) {
-                const img = Array.isArray(product.image) ? product.image[0] : product.image;
-                if (typeof img === 'string' && img.startsWith('http')) {
-                  imageUrl = img;
-                  break;
-                } else if (img?.url) {
-                  imageUrl = img.url;
-                  break;
-                }
-              }
-              if (imageUrl) break;
+          for (const product of getJsonLdProducts()) {
+            if (product?.image) {
+              const img = Array.isArray(product.image) ? product.image[0] : product.image;
+              if (typeof img === 'string') imageUrl = new URL(img, location.href).href;
+              else if (img?.url) imageUrl = new URL(img.url, location.href).href;
             }
             if (imageUrl) break;
           }
@@ -1166,6 +1190,19 @@ export async function scrapeProduct(url) {
       } catch (e) {
         console.log('Could not resolve image URL:', e.message);
       }
+    }
+
+    if (!isLikelyProductImageUrl(resolvedImageUrl, finalUrl)) {
+      resolvedImageUrl = null;
+    }
+
+    // Shopify exposes stable product JSON even when a theme's og:image is
+    // broken or its gallery is rendered dynamically. Prefer the selected
+    // variant image when the URL includes ?variant=... .
+    const shopifyImage = await getShopifyProductImage(finalUrl);
+    if (shopifyImage) {
+      resolvedImageUrl = shopifyImage;
+      console.log(`Found Shopify product image: ${shopifyImage}`);
     }
     
     // Final name extraction if still missing (server-side)
