@@ -74,7 +74,7 @@ export function createItem({
   return getItemById(result.lastInsertRowid);
 }
 
-export function updateItemPrice(id, newPrice) {
+export function updateItemPrice(id, newPrice, offer = null) {
   const db = getDatabase();
   const item = getItemById(id);
 
@@ -88,13 +88,28 @@ export function updateItemPrice(id, newPrice) {
   const lowest_price = Math.min(lowestPrice, newPriceNum);
   const last_checked = new Date().toISOString();
 
+  const sourcesJson = offer?.tracked_sources
+    ? JSON.stringify(offer.tracked_sources)
+    : item.tracked_sources;
+
   db.prepare(
     `
     UPDATE items
-    SET current_price = ?, lowest_price = ?, last_checked = ?
+    SET current_price = ?, lowest_price = ?, last_checked = ?,
+        url = COALESCE(?, url),
+        store_name = COALESCE(?, store_name),
+        tracked_sources = ?
     WHERE id = ?
   `
-  ).run(newPriceNum, lowest_price, last_checked, id);
+  ).run(
+    newPriceNum,
+    lowest_price,
+    last_checked,
+    offer?.productUrl || null,
+    offer?.storeName || null,
+    sourcesJson,
+    id
+  );
 
   addPriceHistory(id, newPriceNum);
 

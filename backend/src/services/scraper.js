@@ -2309,6 +2309,40 @@ export async function resolveMerchantOffers(results) {
 }
 
 /**
+ * Re-discover the cheapest current retailer for an already identified item.
+ * Product-title similarity is evaluated before price so a cheap accessory or
+ * loosely related product cannot beat the correct item.
+ */
+export async function findCheapestMatchingOffer(productName) {
+  const search = await searchShoppingSerpAPI(productName);
+  if (!search.success || !search.results?.length) return null;
+
+  const ignored = new Set(['a', 'an', 'and', 'for', 'in', 'of', 'the', 'to', 'with', 'women', 'womens', 'men', 'mens']);
+  const words = (value) => [...new Set(String(value || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .split(/\s+/)
+    .filter((word) => word.length > 1 && !ignored.has(word)))];
+
+  const wanted = words(productName);
+  const scored = search.results.map((result) => {
+    const offered = new Set(words(result.title));
+    const matchCount = wanted.filter((word) => offered.has(word)).length;
+    return { ...result, matchCount };
+  });
+  const bestMatchCount = Math.max(...scored.map((result) => result.matchCount));
+  const minimumMatch = Math.max(2, Math.ceil(wanted.length * 0.6));
+  const relevant = scored
+    .filter((result) => result.matchCount >= minimumMatch && result.matchCount >= bestMatchCount - 1)
+    .sort((a, b) => b.matchCount - a.matchCount || Number(a.price) - Number(b.price));
+
+  if (!relevant.length) return null;
+  const [resolved] = await resolveMerchantOffers([relevant[0]]);
+  const { matchCount, serpapiProductApi, ...offer } = resolved;
+  return offer.productUrl ? offer : null;
+}
+
+/**
  * Search DuckDuckGo Shopping for products and return the cheapest results
  * @param {string} searchQuery - Product name/description to search for
  * @returns {object} - { success, results: [{ title, price, storeName, productUrl, imageUrl }] }

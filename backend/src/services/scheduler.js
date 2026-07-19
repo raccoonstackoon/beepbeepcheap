@@ -1,6 +1,6 @@
 import cron from 'node-cron';
 import { getAllItems, updateItemPrice } from '../database/queries.js';
-import { scrapePrice } from './scraper.js';
+import { findCheapestMatchingOffer, scrapePrice } from './scraper.js';
 
 let schedulerTask = null;
 
@@ -22,13 +22,48 @@ export async function checkAllPrices() {
   for (const item of itemsWithUrls) {
     try {
       console.log(`Checking: ${item.name}`);
-      // Pass previous price for cross-validation
-      const newPrice = await scrapePrice(item.url, item.current_price);
+      // Re-run product discovery so the item can move to a newly cheaper
+      // retailer instead of remaining tied to the URL chosen on save day.
+      let cheapestOffer = await findCheapestMatchingOffer(item.name);
+      let newPrice = cheapestOffer?.price ?? null;
+
+      // Keep monitoring alive if shopping discovery is temporarily unavailable.
+      if (newPrice === null) {
+        newPrice = await scrapePrice(item.url, item.current_price);
+        cheapestOffer = null;
+      }
 
       if (newPrice !== null) {
         const oldPrice = item.current_price;
-        updateItemPrice(item.id, newPrice);
+        let trackedSources = null;
+        if (cheapestOffer) {
+          try {
+            const existing = item.tracked_sources ? JSON.parse(item.tracked_sources) : [];
+            const source = {
+              title: cheapestOffer.title,
+              price: cheapestOffer.price,
+              storeName: cheapestOffer.storeName,
+              productUrl: cheapestOffer.productUrl,
+              imageUrl: cheapestOffer.imageUrl || item.image_url,
+            };
+            const sourceKey = `${source.storeName}|${source.productUrl}`;
+            trackedSources = [source, ...existing.filter((entry) =>
+              `${entry.storeName}|${entry.productUrl}` !== sourceKey
+            )].slice(0, 10);
+          } catch {
+            trackedSources = null;
+          }
+        }
+
+        updateItemPrice(item.id, newPrice, cheapestOffer ? {
+          ...cheapestOffer,
+          tracked_sources: trackedSources,
+        } : null);
         checked++;
+
+        if (cheapestOffer && (item.url !== cheapestOffer.productUrl || item.store_name !== cheapestOffer.storeName)) {
+          console.log(`  🏪 Cheapest seller: ${cheapestOffer.storeName} (£${Number(newPrice).toFixed(2)})`);
+        }
 
         if (oldPrice !== newPrice) {
           updated++;
@@ -97,7 +132,6 @@ export function stopScheduler() {
 export async function triggerPriceCheck() {
   return await checkAllPrices();
 }
-
 
 
 
