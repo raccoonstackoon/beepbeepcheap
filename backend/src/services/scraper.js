@@ -992,36 +992,6 @@ export async function scrapeProduct(url, navigationRetry = 0) {
         } catch (e) {}
       }
       
-      // Generic image selectors as fallback
-      if (!imageUrl) {
-        const genericImageSelectors = [
-          'img[itemprop="image"]',
-          'img[data-image-id]',
-          'main img[src*="/cdn/shop/files/"]',
-          '.product-image img',
-          '.main-image img',
-          '[class*="product"] img',
-          '[class*="gallery"] img:first-of-type',
-          '.pdp-image img',
-          'img.primary',
-          '[class*="ProductImage"] img',
-          '[class*="product-image"] img',
-          'picture source',
-          'picture img',
-        ];
-        
-        for (const selector of genericImageSelectors) {
-          try {
-            const el = document.querySelector(selector);
-            const url = extractImageUrl(el);
-            if (url) {
-              imageUrl = url;
-              break;
-            }
-          } catch (e) {}
-        }
-      }
-      
       // Helper to check if an image URL is likely a product image (not a logo/icon/banner)
       const isValidProductImage = (url) => {
         if (!url) return false;
@@ -1063,26 +1033,16 @@ export async function scrapeProduct(url, navigationRetry = 0) {
       // For stores where JSON-LD image is more reliable, try that first
       if (jsonLdPriorityStores.includes(store)) {
         try {
-          const ldJsonElements = document.querySelectorAll('script[type="application/ld+json"]');
-          for (const ldJson of ldJsonElements) {
-            const data = JSON.parse(ldJson.textContent);
-            const items = Array.isArray(data) ? data : [data];
-            for (const item of items) {
-              const product = item['@type'] === 'Product' ? item : null;
-              if (product?.image) {
-                const img = Array.isArray(product.image) ? product.image[0] : product.image;
-                if (typeof img === 'string' && img.startsWith('http') && isValidProductImage(img)) {
-                  imageUrl = img;
-                  console.log(`Found image from JSON-LD for ${store}: ${imageUrl}`);
-                  break;
-                } else if (img?.url && isValidProductImage(img.url)) {
-                  imageUrl = img.url;
-                  console.log(`Found image from JSON-LD for ${store}: ${imageUrl}`);
-                  break;
-                }
+          for (const product of getJsonLdProducts()) {
+            if (product?.image) {
+              const img = Array.isArray(product.image) ? product.image[0] : product.image;
+              const candidate = typeof img === 'string' ? img : (img?.url || img?.contentUrl);
+              if (isValidProductImage(candidate)) {
+                imageUrl = new URL(candidate, location.href).href;
+                console.log(`Found image from JSON-LD for ${store}: ${imageUrl}`);
+                break;
               }
             }
-            if (imageUrl) break;
           }
         } catch (e) {}
       }
@@ -1094,7 +1054,8 @@ export async function scrapeProduct(url, navigationRetry = 0) {
       
       // Try og:image meta tag (often more reliable for complex sites)
       if (!imageUrl) {
-        const ogImage = getAttr('meta[property="og:image"]', 'content');
+        const ogImage = getAttr('meta[property="og:image:secure_url"]', 'content')
+          || getAttr('meta[property="og:image"]', 'content');
         if (isValidProductImage(ogImage)) {
           imageUrl = ogImage;
         }
@@ -1102,7 +1063,8 @@ export async function scrapeProduct(url, navigationRetry = 0) {
       
       // Try twitter:image as fallback
       if (!imageUrl) {
-        const twitterImage = getAttr('meta[name="twitter:image"]', 'content');
+        const twitterImage = getAttr('meta[name="twitter:image"]', 'content')
+          || getAttr('meta[name="twitter:image:src"]', 'content');
         if (isValidProductImage(twitterImage)) {
           imageUrl = twitterImage;
         }
@@ -1115,11 +1077,51 @@ export async function scrapeProduct(url, navigationRetry = 0) {
             if (product?.image) {
               const img = Array.isArray(product.image) ? product.image[0] : product.image;
               if (typeof img === 'string') imageUrl = new URL(img, location.href).href;
-              else if (img?.url) imageUrl = new URL(img.url, location.href).href;
+              else if (img?.url || img?.contentUrl) imageUrl = new URL(img.url || img.contentUrl, location.href).href;
             }
             if (imageUrl) break;
           }
         } catch (e) {}
+      }
+
+      // Standard metadata used by some commerce frameworks outside JSON-LD.
+      if (!imageUrl) {
+        const metadataImage = getAttr('meta[itemprop="image"]', 'content')
+          || getAttr('link[rel="image_src"]', 'href');
+        if (isValidProductImage(metadataImage)) imageUrl = new URL(metadataImage, location.href).href;
+      }
+
+      // Last generic fallback: score all rendered images instead of accepting
+      // the first <img>, which is frequently a logo, menu icon, or campaign.
+      if (!imageUrl) {
+        const titleWords = new Set(String(name || '')
+          .toLowerCase().replace(/[^a-z0-9]+/g, ' ').split(/\s+/)
+          .filter((word) => word.length > 2));
+        let best = null;
+        for (const el of document.querySelectorAll('img')) {
+          const candidateUrl = extractImageUrl(el);
+          if (!isValidProductImage(candidateUrl)) continue;
+
+          const width = el.naturalWidth || Number(el.getAttribute('width')) || 0;
+          const height = el.naturalHeight || Number(el.getAttribute('height')) || 0;
+          const alt = String(el.getAttribute('alt') || '').toLowerCase();
+          const context = String(el.closest('[class], [id]')?.className || '').toLowerCase();
+          const altMatches = [...titleWords].filter((word) => alt.includes(word)).length;
+          let score = 0;
+          if (width >= 300 && height >= 300) score += 4;
+          if (width * height >= 500000) score += 2;
+          if (el.closest('main, [role="main"]')) score += 3;
+          if (/(product|gallery|media|pdp|carousel|hero)/.test(context)) score += 3;
+          if (altMatches >= 2) score += 5;
+          else if (altMatches === 1) score += 1;
+          if (el.closest('header, nav, footer')) score -= 8;
+          if (/(logo|icon|payment|avatar)/.test(alt)) score -= 8;
+          if ((width && width < 180) || (height && height < 180)) score -= 5;
+          if (width && height && (width / height > 3 || height / width > 3)) score -= 4;
+
+          if (!best || score > best.score) best = { url: candidateUrl, score };
+        }
+        if (best && best.score >= 2) imageUrl = best.url;
       }
       
       // Final fallback: try to extract name from URL for fashion sites
