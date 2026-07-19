@@ -193,7 +193,7 @@ function smartCapitalize(name) {
  * Scrapes product information from a URL
  * Uses multiple strategies to find price, name, and image
  */
-export async function scrapeProduct(url) {
+export async function scrapeProduct(url, navigationRetry = 0) {
   let browser;
   
   try {
@@ -1281,6 +1281,12 @@ export async function scrapeProduct(url) {
   } catch (error) {
     if (browser) {
       await browser.close();
+    }
+
+    if (navigationRetry < 1 && /execution context was destroyed|frame was detached|navigat/i.test(error.message)) {
+      console.warn(`⚠️ Page navigated during extraction — retrying once: ${url}`);
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      return scrapeProduct(url, navigationRetry + 1);
     }
     
     console.error('❌ Scraping error:', error.message);
