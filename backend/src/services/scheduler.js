@@ -22,12 +22,24 @@ export async function checkAllPrices() {
   for (const item of itemsWithUrls) {
     try {
       console.log(`Checking: ${item.name}`);
-      // Re-run product discovery so the item can move to a newly cheaper
-      // retailer instead of remaining tied to the URL chosen on save day.
-      let cheapestOffer = await findCheapestMatchingOffer(item.name);
+      // Search/image-created items carry tracked_sources and may move between
+      // retailers. A user-supplied exact URL has no tracked_sources and must
+      // remain pinned to that page.
+      let discoveryTracked = false;
+      try {
+        const sources = item.tracked_sources ? JSON.parse(item.tracked_sources) : [];
+        discoveryTracked = Array.isArray(sources) && sources.length > 0;
+      } catch {
+        discoveryTracked = false;
+      }
+
+      let cheapestOffer = discoveryTracked
+        ? await findCheapestMatchingOffer(item.name)
+        : null;
       let newPrice = cheapestOffer?.price ?? null;
 
-      // Keep monitoring alive if shopping discovery is temporarily unavailable.
+      // Exact-URL items always take this path. Search-created items use it as
+      // a fallback when shopping discovery is temporarily unavailable.
       if (newPrice === null) {
         newPrice = await scrapePrice(item.url, item.current_price);
         cheapestOffer = null;
@@ -132,7 +144,6 @@ export function stopScheduler() {
 export async function triggerPriceCheck() {
   return await checkAllPrices();
 }
-
 
 
 
