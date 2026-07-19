@@ -46,6 +46,12 @@ export default function Dashboard({ items, alerts, onRefresh, apiBase }) {
   const [pushStatus, setPushStatus] = useState(getPushNotificationStatus());
   const [enablingPush, setEnablingPush] = useState(false);
 
+  useEffect(() => {
+    const handlePushStatus = (event) => setPushStatus(event.detail);
+    window.addEventListener('push-status-changed', handlePushStatus);
+    return () => window.removeEventListener('push-status-changed', handlePushStatus);
+  }, []);
+
   const handleEnableNotifications = async () => {
     setEnablingPush(true);
     try {

@@ -67,5 +67,6 @@ export function getPushNotificationStatus() {
   if (Capacitor.isNativePlatform()) return 'ready';
   if (!supported()) return 'unavailable';
   if (Notification.permission === 'denied') return 'denied';
+  if (Notification.permission === 'granted') return 'enabled';
   return 'ready';
 }

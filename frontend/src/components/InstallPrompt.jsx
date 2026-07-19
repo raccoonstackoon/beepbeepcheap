@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Share, MoreVertical, Plus } from 'lucide-react';
+import { Share, MoreVertical, Plus, BellRing } from 'lucide-react';
 import './InstallPrompt.css';
+import { enablePushNotifications, syncExistingPushSubscription } from '../pushNotifications.js';
 
 function isIos() {
   return /iP(hone|ad|od)/.test(navigator.userAgent);
@@ -58,14 +59,29 @@ export default function InstallPrompt() {
   const [visible, setVisible] = useState(false);
   const [showHow, setShowHow] = useState(false);
   const [instructionStep, setInstructionStep] = useState(0);
+  const [notificationPrompt, setNotificationPrompt] = useState(false);
+  const [enablingNotifications, setEnablingNotifications] = useState(false);
 
   useEffect(() => {
-    if (!isIos() || isStandalone()) return;
-    const timer = setTimeout(() => setVisible(true), 800);
-    return () => clearTimeout(timer);
+    if (!isIos()) return;
+
+    if (!isStandalone()) {
+      const timer = setTimeout(() => setVisible(true), 800);
+      return () => clearTimeout(timer);
+    }
+
+    let cancelled = false;
+    syncExistingPushSubscription().then((result) => {
+      if (cancelled || result.status !== 'ready') return;
+      if (localStorage.getItem('beepbeep-notification-prompt-dismissed') === '1') return;
+      setNotificationPrompt(true);
+      setVisible(true);
+    }).catch((error) => console.error('Could not check notification setup:', error));
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
+    if (isStandalone()) return;
     const handleVisibility = () => {
       if (isStandalone()) setVisible(false);
     };
@@ -83,12 +99,49 @@ export default function InstallPrompt() {
     setInstructionStep(0);
   };
 
+  const enableNotifications = async () => {
+    setEnablingNotifications(true);
+    try {
+      const result = await enablePushNotifications();
+      window.dispatchEvent(new CustomEvent('push-status-changed', { detail: result.status }));
+      if (result.status === 'enabled' || result.status === 'denied') setVisible(false);
+    } catch (error) {
+      console.error('Could not enable price alerts:', error);
+    } finally {
+      setEnablingNotifications(false);
+    }
+  };
+
+  const dismissNotifications = () => {
+    localStorage.setItem('beepbeep-notification-prompt-dismissed', '1');
+    setVisible(false);
+  };
+
   if (!visible) return null;
 
   return (
     <div className="install-gate">
       <div className={`install-gate-content ${showHow ? 'install-gate-content--wide' : ''}`}>
-        {!showHow ? (
+        {notificationPrompt ? (
+          <div className="install-gate-ask fade-in">
+            <BellRing size={54} aria-hidden />
+            <h2 className="install-gate-title">Turn on price alerts</h2>
+            <p className="install-gate-desc">
+              Get a normal iPhone notification when one of your saved products gets cheaper—even when beepbeep is closed.
+            </p>
+            <button
+              type="button"
+              className="btn-install btn-install-primary btn-install-lg"
+              onClick={enableNotifications}
+              disabled={enablingNotifications}
+            >
+              {enablingNotifications ? 'Turning on…' : 'Turn on price alerts'}
+            </button>
+            <button type="button" className="btn-install btn-install-ghost" onClick={dismissNotifications}>
+              Maybe later
+            </button>
+          </div>
+        ) : !showHow ? (
           <div className="install-gate-ask fade-in">
             <img src="/icons/icon-192.png" alt="beepbeep" className="install-gate-icon" />
             <h2 className="install-gate-title">Add beepbeep to your home screen</h2>
