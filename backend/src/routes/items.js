@@ -4,7 +4,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import * as queries from '../database/queries.js';
 import { requireUserId } from '../middleware/userId.js';
-import { scrapeProduct, scrapePrice, searchShoppingSerpAPI, searchCostco, getStoreName } from '../services/scraper.js';
+import { scrapeProduct, scrapePrice, searchShoppingSerpAPI, resolveMerchantOffers, searchCostco, getStoreName } from '../services/scraper.js';
 import { processImage } from '../services/imageProcessor.js';
 
 const router = express.Router();
@@ -300,7 +300,7 @@ router.post('/image', upload.single('image'), async (req, res) => {
       return aPrice - bPrice;
     });
 
-    const topResults = filteredResults.slice(0, 3);
+    const topResults = await resolveMerchantOffers(filteredResults.slice(0, 3));
     
     for (const r of topResults) {
       console.log(`   💰 ${r.currency || '£'}${r.price || 'N/A'} - ${r.title?.substring(0, 50)}... (${r.storeName})`);
@@ -404,6 +404,11 @@ router.post('/search', async (req, res) => {
       backupResults = partialMatches.slice(3, 10);
       console.log(`   ⚠️ No exact product matches; ${partialMatches.length} partial matches (>=${minWords} of ${identityWords.length} identity words)`);
     }
+
+    // Resolve only the visible top three results. Backup results remain cheap
+    // search metadata until a future request promotes them.
+    topResults = await resolveMerchantOffers(topResults);
+    backupResults = backupResults.map(({ serpapiProductApi, ...result }) => result);
 
     for (const r of topResults) {
       console.log(`   💰 £${r.price || 'N/A'} - ${r.title?.substring(0, 50)}... (${r.storeName}) [id:${r.idMatchCount}/${identityWords.length} spec:${r.specMatchCount}/${specWords.length}]`);

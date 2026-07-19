@@ -2187,6 +2187,9 @@ export async function searchShoppingSerpAPI(searchQuery) {
           // that actually advertised this price and can be monitored later.
           productUrl: item.link || item.product_link || '',
           imageUrl: item.thumbnail || null,
+          serpapiProductApi: item.serpapi_product_api || (item.product_id
+            ? `https://serpapi.com/search.json?engine=google_product&product_id=${encodeURIComponent(item.product_id)}&gl=uk&hl=en`
+            : null),
         };
       })
       .filter(Boolean);
@@ -2234,6 +2237,67 @@ export async function searchShoppingSerpAPI(searchQuery) {
     console.log('   ↩️ Falling back to DuckDuckGo Puppeteer scraper...');
     return searchDuckDuckGoShopping(searchQuery);
   }
+}
+
+/**
+ * Resolve Google Shopping product pages to the direct URL for the merchant
+ * whose advertised price/source produced each result. This intentionally runs
+ * only for the small, already-ranked result set supplied by the caller.
+ */
+export async function resolveMerchantOffers(results) {
+  const apiKey = process.env.SERPAPI_KEY;
+  if (!apiKey || !Array.isArray(results)) {
+    return (results || []).map(({ serpapiProductApi, ...result }) => result);
+  }
+
+  const normalize = (value) => String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const parsePrice = (value) => {
+    const parsed = Number.parseFloat(String(value || '').replace(/[^0-9.]/g, ''));
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+
+  return Promise.all(results.map(async ({ serpapiProductApi, ...result }) => {
+    if (!serpapiProductApi) return result;
+
+    try {
+      const detailUrl = new URL(serpapiProductApi);
+      detailUrl.searchParams.set('api_key', apiKey);
+      const response = await fetch(detailUrl, { signal: AbortSignal.timeout(15000) });
+      if (!response.ok) return result;
+
+      const detail = await response.json();
+      const sellers = detail.sellers_results?.online_sellers || [];
+      const directSellers = sellers.filter((seller) => seller.direct_link);
+      if (!directSellers.length) return result;
+
+      const source = normalize(result.storeName);
+      const expectedPrice = Number(result.price);
+      directSellers.sort((a, b) => {
+        const aName = normalize(a.name);
+        const bName = normalize(b.name);
+        const aSourceMatch = source && (aName.includes(source) || source.includes(aName)) ? 1 : 0;
+        const bSourceMatch = source && (bName.includes(source) || source.includes(bName)) ? 1 : 0;
+        if (aSourceMatch !== bSourceMatch) return bSourceMatch - aSourceMatch;
+
+        const aPrice = parsePrice(a.base_price) ?? parsePrice(a.total_price);
+        const bPrice = parsePrice(b.base_price) ?? parsePrice(b.total_price);
+        return Math.abs((aPrice ?? expectedPrice) - expectedPrice)
+          - Math.abs((bPrice ?? expectedPrice) - expectedPrice);
+      });
+
+      const seller = directSellers[0];
+      const sellerPrice = parsePrice(seller.base_price) ?? Number(result.price);
+      return {
+        ...result,
+        price: sellerPrice,
+        storeName: seller.name || result.storeName,
+        productUrl: seller.direct_link,
+      };
+    } catch (error) {
+      console.warn(`Could not resolve direct merchant link for ${result.storeName}: ${error.message}`);
+      return result;
+    }
+  }));
 }
 
 /**
