@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Dashboard from './pages/Dashboard';
 import ItemDetail from './pages/ItemDetail';
 import Rewards from './pages/Rewards';
+import Login from './pages/Login';
 import NotificationContainer from './components/NotificationContainer';
 import InstallPrompt from './components/InstallPrompt';
 import './App.css';
@@ -18,20 +19,24 @@ function App() {
   const fetchItems = async () => {
     try {
       const res = await apiFetch(API_BASE, '/items');
+      if (!res.ok) throw new Error(`Items request failed (${res.status})`);
       const data = await res.json();
-      setItems(data);
+      setItems(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error('Failed to fetch items:', error);
+      setItems([]);
     }
   };
 
   const fetchAlerts = async () => {
     try {
       const res = await apiFetch(API_BASE, '/alerts/unread');
+      if (!res.ok) throw new Error(`Alerts request failed (${res.status})`);
       const data = await res.json();
-      setAlerts(data);
+      setAlerts(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error('Failed to fetch alerts:', error);
+      setAlerts([]);
     }
   };
 
@@ -80,6 +85,7 @@ function App() {
       <InstallPrompt />
       
       <Routes>
+        <Route path="/login" element={<Login onLoginSuccess={refreshData} />} />
         <Route 
           path="/" 
           element={

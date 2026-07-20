@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, 
   Target, 
@@ -8,14 +8,19 @@ import {
   Trophy,
   Sparkles,
   Check,
-  Lock
+  Lock,
+  LogIn,
+  LogOut
 } from 'lucide-react';
 import { Raccoon } from '../components/PixelMascot';
 import raccoonImage from '../assets/raccoon.png';
 import './Rewards.css';
 import { apiFetch } from '../apiConfig.js';
+import { clearAuthToken, isAuthenticated } from '../auth.js';
+import { resetUserId } from '../userId.js';
 
 function Rewards({ apiBase }) {
+  const navigate = useNavigate();
   const [rewards, setRewards] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -55,6 +60,13 @@ function Rewards({ apiBase }) {
       </div>
     );
   }
+
+  const signedIn = isAuthenticated();
+  const handleLogout = () => {
+    clearAuthToken();
+    resetUserId();
+    navigate('/login');
+  };
 
   // Calculate points breakdown
   const breakdown = [
@@ -202,9 +214,22 @@ function Rewards({ apiBase }) {
           <li>Track more items and save money</li>
         </ul>
       </section>
+
+      <section className="account-section">
+        {signedIn ? (
+          <button className="btn-account" onClick={handleLogout}>
+            <LogOut size={18} />
+            <span>Sign out</span>
+          </button>
+        ) : (
+          <Link className="btn-account" to="/login">
+            <LogIn size={18} />
+            <span>Sign in to sync rewards</span>
+          </Link>
+        )}
+      </section>
     </div>
   );
 }
 
 export default Rewards;
-

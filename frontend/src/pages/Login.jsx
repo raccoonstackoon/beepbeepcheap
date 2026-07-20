@@ -138,7 +138,7 @@ function Login({ onLoginSuccess }) {
           </button>
 
           <p className="login-note">
-            Data won't save or sync. Sign in to keep your list.
+            Your list stays on this device. Sign in to sync it across devices.
           </p>
         </div>
 

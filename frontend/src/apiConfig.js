@@ -22,15 +22,15 @@ export function apiFetch(apiBase, path, options = {}) {
     }
   }
 
-  // Add JWT token if available
+  // Always include the stable device ID. It scopes anonymous access and gives
+  // the server a safe fallback when an expired JWT is encountered.
+  const userId = getOrCreateUserId();
+  headers.set('X-User-Id', userId);
+
+  // Add JWT token when available; the server gives a valid JWT precedence.
   const token = getAuthToken();
   if (token) {
     headers.set('Authorization', `Bearer ${token}`);
-  } else {
-    // Fallback to X-User-Id for anonymous users
-    const userId = getOrCreateUserId();
-    console.log('[apiConfig] Sending X-User-Id:', userId);
-    headers.set('X-User-Id', userId);
   }
 
   if (options.body && typeof options.body === 'string' && !headers.has('Content-Type')) {
