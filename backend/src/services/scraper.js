@@ -211,17 +211,17 @@ export async function scrapeProduct(url, navigationRetry = 0) {
     
     // Set extra headers
     await page.setExtraHTTPHeaders({
-      'Accept-Language': 'en-US,en;q=0.9',
+      'Accept-Language': 'en-GB,en;q=0.9',
       'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
     });
     
     // Set cookies for sites that require country/region selection
     if (url.includes('cos.com') || url.includes('hm.com')) {
       await page.setCookie(
-        { name: 'HMCORP_locale', value: 'en_US', domain: '.cos.com' },
-        { name: 'HMCORP_currency', value: 'USD', domain: '.cos.com' },
-        { name: 'HMCORP_country', value: 'US', domain: '.cos.com' },
-        { name: 'HMCORP_locale', value: 'en_US', domain: '.hm.com' },
+        { name: 'HMCORP_locale', value: 'en_GB', domain: '.cos.com' },
+        { name: 'HMCORP_currency', value: 'GBP', domain: '.cos.com' },
+        { name: 'HMCORP_country', value: 'GB', domain: '.cos.com' },
+        { name: 'HMCORP_locale', value: 'en_GB', domain: '.hm.com' },
       );
     }
     
@@ -323,12 +323,12 @@ export async function scrapeProduct(url, navigationRetry = 0) {
           try {
             // Try clicking on USA in the country selector
             await page.evaluate(() => {
-              // Look for USA/United States link
+              // Keep the product in the UK/GBP storefront.
               const links = document.querySelectorAll('a');
               for (const link of links) {
-                if (link.textContent.includes('United States') || 
-                    link.href?.includes('en_usd') ||
-                    link.href?.includes('/us/')) {
+                if (link.textContent.includes('United Kingdom') ||
+                    link.href?.includes('en_gbp') ||
+                    link.href?.includes('/gb/')) {
                   link.click();
                   return true;
                 }
@@ -337,8 +337,8 @@ export async function scrapeProduct(url, navigationRetry = 0) {
               // Try buttons
               const buttons = document.querySelectorAll('button');
               for (const btn of buttons) {
-                if (btn.textContent.includes('United States') || 
-                    btn.textContent.includes('USA')) {
+                if (btn.textContent.includes('United Kingdom') ||
+                    btn.textContent.trim() === 'UK') {
                   btn.click();
                   return true;
                 }
@@ -353,10 +353,10 @@ export async function scrapeProduct(url, navigationRetry = 0) {
             const pageTitle = await page.title();
             if (pageTitle.includes('Select') || pageTitle.includes('Country')) {
               // Try refreshing the page with the US URL
-              const usUrl = url.replace('en_gb', 'en_usd').replace('/gb/', '/us/');
-              if (usUrl !== url) {
-                console.log(`Navigating to US URL: ${usUrl}`);
-                await page.goto(usUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+              const ukUrl = url.replace('en_usd', 'en_gbp').replace('/us/', '/gb/');
+              if (ukUrl !== url) {
+                console.log(`Navigating to UK URL: ${ukUrl}`);
+                await page.goto(ukUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
                 await new Promise(resolve => setTimeout(resolve, 3000));
               }
             }
@@ -459,35 +459,70 @@ export async function scrapeProduct(url, navigationRetry = 0) {
       
       // ========== PRICE EXTRACTION ==========
       let price = null;
+      let priceSource = null;
+      let priceConfidence = 'low';
+      let currency = null;
       
       // Helper to extract price from JSON-LD structured data
-      // Prefers GBP offers; falls back to first available price
+      // Only returns a GBP offer belonging to the product page. Pages often
+      // embed additional Product records for recommendations and accessories.
       const getJsonLdPrice = () => {
         try {
-          let fallbackPrice = null;
+          const currentPath = location.pathname.replace(/\/$/, '');
+          const candidates = [];
+          const matchesPage = (value) => {
+            if (!value) return false;
+            try { return new URL(String(value), location.href).pathname.replace(/\/$/, '') === currentPath; }
+            catch { return false; }
+          };
           for (const product of getJsonLdProducts()) {
             if (product?.offers) {
+              const productMatch = matchesPage(product.url || product['@id']);
               const offers = Array.isArray(product.offers) ? product.offers : [product.offers];
               for (const offer of offers) {
-                if (offer.price) {
-                  const currency = (offer.priceCurrency || '').toUpperCase();
-                  if (currency === 'GBP') {
-                    return parseFloat(offer.price);
-                  }
-                  if (fallbackPrice === null) {
-                    fallbackPrice = parseFloat(offer.price);
-                  }
-                }
+                const offerCurrency = String(offer.priceCurrency || offer.priceSpecification?.priceCurrency || '').toUpperCase();
+                const value = cleanPrice(String(offer.price ?? offer.lowPrice ?? offer.priceSpecification?.price ?? ''));
+                if (offerCurrency !== 'GBP' || !value || value <= 0 || value >= 100000) continue;
+                let score = productMatch ? 12 : 0;
+                if (matchesPage(offer.url)) score += 10;
+                if (/instock/i.test(String(offer.availability || ''))) score += 2;
+                candidates.push({ value, score });
               }
             }
           }
-          return fallbackPrice;
+          candidates.sort((a, b) => b.score - a.score);
+          return candidates[0]?.value ?? null;
         } catch (e) {}
         return null;
       };
+
+      // Structured product offers and commerce meta tags are the only generic
+      // sources authoritative enough to save automatically for every retailer.
+      price = getJsonLdPrice();
+      if (price) {
+        priceSource = 'json_ld';
+        priceConfidence = 'high';
+        currency = 'GBP';
+      }
+      if (!price) {
+        const metaPrice = getAttr('meta[property="product:price:amount"]', 'content')
+          || getAttr('meta[property="og:price:amount"]', 'content');
+        const metaCurrency = String(
+          getAttr('meta[property="product:price:currency"]', 'content')
+          || getAttr('meta[itemprop="priceCurrency"]', 'content')
+          || ''
+        ).toUpperCase();
+        const parsedMetaPrice = cleanPrice(metaPrice);
+        if (metaCurrency === 'GBP' && parsedMetaPrice && parsedMetaPrice > 0 && parsedMetaPrice < 100000) {
+          price = parsedMetaPrice;
+          priceSource = 'product_meta';
+          priceConfidence = 'high';
+          currency = 'GBP';
+        }
+      }
       
       // For certain stores, prioritize JSON-LD as it's more accurate
-      if (jsonLdPriorityStores.includes(store)) {
+      if (!price && jsonLdPriorityStores.includes(store)) {
         price = getJsonLdPrice();
         if (price) {
           console.log(`Found price from JSON-LD for ${store}: ${price}`);
@@ -1173,7 +1208,7 @@ export async function scrapeProduct(url, navigationRetry = 0) {
         }
       }
       
-      return { name, price, imageUrl, pageTitle: document.title };
+      return { name, price, priceSource, priceConfidence, currency, imageUrl, pageTitle: document.title };
     }, storeName);
     
     await browser.close();
@@ -1275,6 +1310,9 @@ export async function scrapeProduct(url, navigationRetry = 0) {
       success: true,
       name: finalName || 'Unknown Product',
       price: productInfo.price,
+      priceSource: productInfo.priceSource,
+      priceConfidence: productInfo.priceConfidence,
+      currency: productInfo.currency,
       imageUrl: resolvedImageUrl || productInfo.imageUrl,
       storeName,
       url
@@ -1323,6 +1361,10 @@ export async function scrapePrice(url, previousPrice = null) {
     return previousPrice;
   }
   const price1 = result1.price;
+  if (result1.priceConfidence !== 'high' || result1.currency !== 'GBP') {
+    console.log(`   ⚠️ Unverified GBP product price — keeping previous price`);
+    return previousPrice;
+  }
   console.log(`   Scrape 1: £${price1}`);
 
   // No previous price (first ever check) → use scrape
@@ -1341,7 +1383,7 @@ export async function scrapePrice(url, previousPrice = null) {
   await new Promise(resolve => setTimeout(resolve, 3000));
 
   const result2 = await scrapeProduct(url);
-  if (!result2.success || !result2.price) {
+  if (!result2.success || !result2.price || result2.priceConfidence !== 'high' || result2.currency !== 'GBP') {
     console.log(`   Verification scrape failed — keeping previous price`);
     return previousPrice;
   }

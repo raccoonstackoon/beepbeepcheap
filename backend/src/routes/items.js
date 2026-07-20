@@ -87,6 +87,13 @@ function normalizeItemUrl(raw) {
   return u;
 }
 
+function hasTrustedGbpPrice(scraped) {
+  return scraped?.price != null
+    && Number.isFinite(Number(scraped.price))
+    && scraped.priceConfidence === 'high'
+    && scraped.currency === 'GBP';
+}
+
 // POST /api/items/url-preview — scrape only; lets the UI confirm/edit before save
 router.post('/url-preview', async (req, res) => {
   try {
@@ -114,13 +121,19 @@ router.post('/url-preview', async (req, res) => {
     if (!scraped.imageUrl) {
       warnings.push('no_image');
     }
+    if (scraped.price != null && !hasTrustedGbpPrice(scraped)) warnings.push('check_price');
+    if (scraped.currency && scraped.currency !== 'GBP') warnings.push('unsupported_currency');
+    if (scraped.price != null && !scraped.currency) warnings.push('unknown_currency');
 
     res.json({
       name: scraped.name,
       url: normalizedUrl,
-      current_price: scraped.price,
+      current_price: hasTrustedGbpPrice(scraped) ? scraped.price : null,
       image_url: scraped.imageUrl,
       store_name: scraped.storeName,
+      price_source: scraped.priceSource || null,
+      price_confidence: scraped.priceConfidence || null,
+      currency: scraped.currency || null,
       warnings,
     });
   } catch (error) {
@@ -155,8 +168,8 @@ router.post('/url', async (req, res) => {
       url: normalizedUrl,
       image_url: scraped.imageUrl,
       store_name: scraped.storeName,
-      current_price: scraped.price,
-      original_price: scraped.price
+      current_price: hasTrustedGbpPrice(scraped) ? scraped.price : null,
+      original_price: hasTrustedGbpPrice(scraped) ? scraped.price : null
     });
     
     res.json(item);
@@ -604,7 +617,7 @@ router.post('/:id/refresh', async (req, res) => {
       console.log(`   - Bad store name: ${storeNameIsBad ? item.store_name : 'NO'}`);
       console.log(`   - URL needs fixing: ${!!fixedUrl}`);
       const scraped = await scrapeProduct(urlToScrape);
-      newPrice = scraped.price;
+      newPrice = hasTrustedGbpPrice(scraped) ? scraped.price : item.current_price;
       newImageUrl = scraped.imageUrl;
       newStoreName = scraped.storeName;
       console.log(`   - Found image: ${newImageUrl ? 'YES' : 'NO'}`);

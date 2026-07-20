@@ -1020,6 +1020,9 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
                 {extractedData.warnings.includes('no_image') && (
                   <p className="form-help">Couldn’t find a product photo — paste an image link if you have one.</p>
                 )}
+                {extractedData.warnings.includes('check_price') && (
+                  <p className="form-help">We couldn’t verify this as the current GBP product price, so we left it blank. Check the page and enter the price manually.</p>
+                )}
               </div>
             )}
             
