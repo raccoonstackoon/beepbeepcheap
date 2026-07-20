@@ -82,32 +82,80 @@ function isLikelyProductImageUrl(value, pageUrl) {
   }
 }
 
-async function getShopifyProductImage(pageUrl) {
+const TRACKING_QUERY_PARAMS = new Set([
+  'gclid', 'gbraid', 'wbraid', 'gad_source', 'gad_campaignid',
+  'fbclid', 'msclkid', 'dclid', 'mc_cid', 'mc_eid',
+]);
+
+/** Remove disposable advertising data without changing product/variant identity. */
+export function normalizeProductUrl(rawUrl) {
+  const parsed = new URL(String(rawUrl || '').trim());
+  for (const key of [...parsed.searchParams.keys()]) {
+    const lowerKey = key.toLowerCase();
+    if (lowerKey.startsWith('utm_') || TRACKING_QUERY_PARAMS.has(lowerKey)) {
+      parsed.searchParams.delete(key);
+    }
+  }
+  parsed.hash = '';
+  return parsed.href;
+}
+
+function absoluteImageUrl(candidate, origin) {
+  if (!candidate) return null;
+  const value = typeof candidate === 'string' ? candidate : candidate.src || candidate.url;
+  if (!value) return null;
+  return value.startsWith('//') ? `https:${value}` : new URL(value, origin).href;
+}
+
+/** Shopify's product endpoint reliably identifies the selected variant. */
+async function getShopifyProductData(pageUrl) {
   try {
     const parsed = new URL(pageUrl);
-    const productMatch = parsed.pathname.match(/^\/products\/([^/]+)/i);
+    const productMatch = parsed.pathname.match(/\/products\/([^/]+)/i);
     if (!productMatch) return null;
 
-    const productJsonUrl = new URL(`/products/${productMatch[1]}.js`, parsed.origin);
+    const productJsonUrl = new URL(`${parsed.pathname.slice(0, productMatch.index)}/products/${productMatch[1]}.js`, parsed.origin);
     const response = await fetch(productJsonUrl, {
-      headers: { Accept: 'application/json' },
+      headers: { Accept: 'application/json', 'Accept-Language': 'en-GB,en;q=0.9' },
       signal: AbortSignal.timeout(10000),
     });
     if (!response.ok) return null;
 
     const product = await response.json();
+    if (!product?.title || !Array.isArray(product.variants) || product.variants.length === 0) return null;
     const selectedVariantId = parsed.searchParams.get('variant');
     const selectedVariant = selectedVariantId
       ? product.variants?.find((variant) => String(variant.id) === selectedVariantId)
       : null;
+    const variant = selectedVariant || product.variants.find((entry) => entry.available) || product.variants[0];
+    const price = Number(variant?.price ?? product.price) / 100;
     const candidate = selectedVariant?.featured_image?.src
       || selectedVariant?.featured_image
       || product.featured_image
       || product.images?.[0];
-    if (!candidate) return null;
+    const absolute = absoluteImageUrl(candidate, parsed.origin);
 
-    const absolute = String(candidate).startsWith('//') ? `https:${candidate}` : new URL(candidate, parsed.origin).href;
-    return isLikelyProductImageUrl(absolute, pageUrl) ? absolute : null;
+    let currency = null;
+    try {
+      const cartResponse = await fetch(new URL('/cart.js', parsed.origin), {
+        headers: { Accept: 'application/json', 'Accept-Language': 'en-GB,en;q=0.9' },
+        signal: AbortSignal.timeout(5000),
+      });
+      if (cartResponse.ok) {
+        const cart = await cartResponse.json();
+        currency = String(cart?.currency || '').toUpperCase() || null;
+      }
+    } catch {
+      // Unknown currency is deliberately returned as unverified.
+    }
+
+    return {
+      name: product.title,
+      price: Number.isFinite(price) && price > 0 ? price : null,
+      currency,
+      imageUrl: isLikelyProductImageUrl(absolute, pageUrl) ? absolute : null,
+      variantId: variant?.id ? String(variant.id) : null,
+    };
   } catch {
     return null;
   }
@@ -197,7 +245,23 @@ export async function scrapeProduct(url, navigationRetry = 0) {
   let browser;
   
   try {
+    url = normalizeProductUrl(url);
     console.log(`🔍 Starting scrape for: ${url}`);
+
+    const shopifyData = await getShopifyProductData(url);
+    if (shopifyData?.price) {
+      return {
+        success: true,
+        name: shopifyData.name,
+        price: shopifyData.price,
+        priceSource: 'shopify_variant',
+        priceConfidence: shopifyData.currency ? 'high' : 'medium',
+        currency: shopifyData.currency,
+        imageUrl: shopifyData.imageUrl,
+        storeName: getStoreName(url),
+        url,
+      };
+    }
     
     browser = await puppeteer.launch(BROWSER_LAUNCH_OPTIONS);
     
@@ -1236,7 +1300,7 @@ export async function scrapeProduct(url, navigationRetry = 0) {
     // Shopify exposes stable product JSON even when a theme's og:image is
     // broken or its gallery is rendered dynamically. Prefer the selected
     // variant image when the URL includes ?variant=... .
-    const shopifyImage = await getShopifyProductImage(finalUrl);
+    const shopifyImage = (await getShopifyProductData(finalUrl))?.imageUrl;
     if (shopifyImage) {
       resolvedImageUrl = shopifyImage;
       console.log(`Found Shopify product image: ${shopifyImage}`);

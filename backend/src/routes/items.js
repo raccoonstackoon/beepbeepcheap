@@ -4,7 +4,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import * as queries from '../database/queries.js';
 import { requireUserId } from '../middleware/userId.js';
-import { scrapeProduct, scrapePrice, searchShoppingSerpAPI, resolveMerchantOffers, searchCostco, getStoreName } from '../services/scraper.js';
+import { scrapeProduct, scrapePrice, searchShoppingSerpAPI, resolveMerchantOffers, searchCostco, getStoreName, normalizeProductUrl } from '../services/scraper.js';
 import { processImage } from '../services/imageProcessor.js';
 
 const router = express.Router();
@@ -84,7 +84,11 @@ function normalizeItemUrl(raw) {
   if (!/^https?:\/\//i.test(u)) {
     u = 'https://' + u.replace(/^\/*/g, '');
   }
-  return u;
+  try {
+    return normalizeProductUrl(u);
+  } catch {
+    return u;
+  }
 }
 
 function hasTrustedGbpPrice(scraped) {
