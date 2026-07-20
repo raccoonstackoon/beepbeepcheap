@@ -524,19 +524,6 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
     searchWithShopName(shopNameInput.trim(), updatedProduct, identifiedProduct?.localImageUrl);
   };
   
-  // Skip brand and search with just product name
-  const handleSkipShopName = () => {
-    if (!productNameInput.trim()) {
-      setError('Please enter a product description');
-      return;
-    }
-    const updatedProduct = {
-      ...identifiedProduct,
-      itemName: productNameInput.trim()
-    };
-    searchWithShopName(null, updatedProduct, identifiedProduct?.localImageUrl);
-  };
-
   const handleManualSave = async () => {
     if (!manualData.name.trim()) {
       setError('Item name is required');

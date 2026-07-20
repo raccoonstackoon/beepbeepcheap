@@ -35,6 +35,7 @@ export default function ItemDetail({ apiBase, onRefresh }) {
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [failedImageUrl, setFailedImageUrl] = useState(null);
   
   // Alternatives state
   const [alternatives, setAlternatives] = useState([]);
@@ -302,11 +303,12 @@ export default function ItemDetail({ apiBase, onRefresh }) {
         {/* Product info */}
         <div className="product-info card fade-in">
           <div className="product-image-container">
-            {item.image_url ? (
+            {item.image_url && failedImageUrl !== item.image_url ? (
               <img 
                 src={item.image_url} 
                 alt={item.name}
                 className="product-image"
+                onError={() => setFailedImageUrl(item.image_url)}
               />
             ) : (
               <div className="product-image-placeholder">
@@ -722,4 +724,3 @@ export default function ItemDetail({ apiBase, onRefresh }) {
     </div>
   );
 }
-

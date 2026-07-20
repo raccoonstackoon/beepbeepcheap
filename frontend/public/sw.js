@@ -1,4 +1,3 @@
-/* eslint-disable no-undef */
 // beepbeep.cheap Service Worker
 // Bump when you need everyone to drop stale HTML / old hashed JS (e.g. UI copy updates).
 const CACHE_NAME = 'beepbeep-v2';
@@ -120,7 +119,6 @@ self.addEventListener('notificationclick', (event) => {
     })
   );
 });
-
 
 
 

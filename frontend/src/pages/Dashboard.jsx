@@ -36,7 +36,6 @@ export default function Dashboard({ items, alerts, onRefresh, apiBase }) {
   const [activeFilter, setActiveFilter] = useState(null);
   
   // Internal search state
-  const [showSearch, setShowSearch] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const searchInputRef = useRef(null);
   
@@ -98,17 +97,6 @@ export default function Dashboard({ items, alerts, onRefresh, apiBase }) {
   useEffect(() => {
     if (items.length <= 8) setSearchQuery('');
   }, [items.length]);
-
-  const handleToggleSearch = () => {
-    setShowSearch(prev => {
-      if (!prev) {
-        setTimeout(() => searchInputRef.current?.focus(), 50);
-      } else {
-        setSearchQuery('');
-      }
-      return !prev;
-    });
-  };
 
   // Show reward toast notification (moved up so it can be used in effects)
   const showRewardToast = (message, coins) => {

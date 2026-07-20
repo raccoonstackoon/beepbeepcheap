@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getApiBase } from '../apiConfig';
 import hyraxImage from '../assets/hyrax.png';
@@ -12,7 +12,7 @@ function Login({ onLoginSuccess }) {
   const [fallingMascots, setFallingMascots] = useState([]);
   const apiBase = getApiBase();
 
-  const handleGoogleSignIn = async (response) => {
+  const handleGoogleSignIn = useCallback(async (response) => {
     setLoading(true);
     setError('');
 
@@ -40,7 +40,7 @@ function Login({ onLoginSuccess }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [apiBase, navigate, onLoginSuccess]);
 
   useEffect(() => {
     if (window.google) {
@@ -53,7 +53,7 @@ function Login({ onLoginSuccess }) {
         { theme: 'outline', size: 'large', width: 300, text: 'signin_with', shape: 'rectangular' }
       );
     }
-  }, []);
+  }, [handleGoogleSignIn]);
 
 
   // Create falling mascots
@@ -125,6 +125,7 @@ function Login({ onLoginSuccess }) {
 
           <div className="login-buttons">
             <div id="google-signin-container" className="google-signin-container"></div>
+            {loading && <p>Signing in…</p>}
           </div>
 
           <div className="login-divider">or continue as guest</div>

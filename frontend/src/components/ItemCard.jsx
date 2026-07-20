@@ -14,6 +14,7 @@ import { apiFetch } from '../apiConfig.js';
 export default function ItemCard({ item, apiBase, onRefresh, style }) {
   const [refreshing, setRefreshing] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
+  const [failedImageUrl, setFailedImageUrl] = useState(null);
   const menuRef = useRef(null);
 
   // Close menu when clicking outside
@@ -76,12 +77,13 @@ export default function ItemCard({ item, apiBase, onRefresh, style }) {
     >
       {/* Image */}
       <div className="item-image-container">
-        {item.image_url ? (
+        {item.image_url && failedImageUrl !== item.image_url ? (
           <img 
             src={item.image_url} 
             alt={item.name}
             className="item-image"
             loading="lazy"
+            onError={() => setFailedImageUrl(item.image_url)}
           />
         ) : (
           <div className="item-image-placeholder">
@@ -172,4 +174,3 @@ export default function ItemCard({ item, apiBase, onRefresh, style }) {
     </Link>
   );
 }
-
