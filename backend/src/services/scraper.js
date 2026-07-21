@@ -115,6 +115,10 @@ async function getShopifyProductData(pageUrl) {
     if (!productMatch) return null;
 
     const productJsonUrl = new URL(`${parsed.pathname.slice(0, productMatch.index)}/products/${productMatch[1]}.js`, parsed.origin);
+    // Shopify localizes storefront prices from the server's location unless a
+    // market is explicit. The app stores GBP prices, so always request the UK
+    // market rather than relying on the deployment region.
+    productJsonUrl.searchParams.set('country', 'GB');
     const response = await fetch(productJsonUrl, {
       headers: { Accept: 'application/json', 'Accept-Language': 'en-GB,en;q=0.9' },
       signal: AbortSignal.timeout(10000),
@@ -137,7 +141,9 @@ async function getShopifyProductData(pageUrl) {
 
     let currency = null;
     try {
-      const cartResponse = await fetch(new URL('/cart.js', parsed.origin), {
+      const cartUrl = new URL('/cart.js', parsed.origin);
+      cartUrl.searchParams.set('country', 'GB');
+      const cartResponse = await fetch(cartUrl, {
         headers: { Accept: 'application/json', 'Accept-Language': 'en-GB,en;q=0.9' },
         signal: AbortSignal.timeout(5000),
       });
