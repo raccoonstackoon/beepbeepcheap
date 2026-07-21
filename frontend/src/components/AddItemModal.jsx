@@ -29,6 +29,7 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
   
   // Ref to file input so we can trigger it programmatically
   const fileInputRef = useRef(null);
+  const cameraInputRef = useRef(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   
@@ -70,8 +71,8 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
 
   // When opened directly in photo mode, trigger file picker immediately
   useEffect(() => {
-    if (initialMode === 'product' && fileInputRef.current) {
-      fileInputRef.current.click();
+    if (initialMode === 'product' && cameraInputRef.current) {
+      cameraInputRef.current.click();
     }
   }, [initialMode]);
 
@@ -188,9 +189,9 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
   // Handle clicking "Take a Photo" - immediately open file picker
   const handlePhotoModeClick = () => {
     setMode('product');
-    // Trigger the file input immediately
-    if (fileInputRef.current) {
-      fileInputRef.current.click();
+    // Android Chrome needs a dedicated capture input to open the camera.
+    if (cameraInputRef.current) {
+      cameraInputRef.current.click();
     }
   };
 
@@ -233,6 +234,9 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
     // Reset file input so the same file can be selected again
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
+    }
+    if (cameraInputRef.current) {
+      cameraInputRef.current.value = '';
     }
   };
 
@@ -627,6 +631,14 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
           onChange={handleImageSelect}
           style={{ display: 'none' }}
         />
+        <input
+          ref={cameraInputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          onChange={handleImageSelect}
+          style={{ display: 'none' }}
+        />
         
         {/* Mode selection */}
         {!mode && (
@@ -682,10 +694,10 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
               <button 
                 className="upload-label" 
                 type="button"
-                onClick={() => { setMode('product'); fileInputRef.current?.click(); }}
+                onClick={handlePhotoModeClick}
               >
                 <Camera size={32} />
-                <span>Upload or take a photo of the item to find best price.</span>
+                <span>Take a photo of the item to find the best price.</span>
               </button>
             </div>
             
@@ -712,13 +724,20 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
         {mode === 'product' && !extractedData && !isAnnotating && !loading && !imageFile && !needsShopName && (
           <div className="image-mode">
             <div className="image-upload-area">
-              <button 
+              <button
                 className="upload-label" 
+                type="button"
+                onClick={() => cameraInputRef.current?.click()}
+              >
+                <Camera size={32} />
+                <span>Take a photo</span>
+              </button>
+              <button
+                className="upload-label"
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
               >
-                <Camera size={32} />
-                <span>Upload or take a photo of the item to find best price.</span>
+                <span>Choose from photo library</span>
               </button>
             </div>
             
