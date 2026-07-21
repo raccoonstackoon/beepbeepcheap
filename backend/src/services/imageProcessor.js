@@ -7,6 +7,8 @@ import { lookupBarcode, isValidBarcode } from './barcodeService.js';
 // Lazy-load Anthropic client (only when needed)
 let anthropic = null;
 
+const DEFAULT_ANTHROPIC_MODELS = ['claude-sonnet-5', 'claude-sonnet-4-6'];
+
 function getAnthropic() {
   if (!anthropic) {
     if (!process.env.ANTHROPIC_API_KEY) {
@@ -17,6 +19,25 @@ function getAnthropic() {
     });
   }
   return anthropic;
+}
+
+async function createAnthropicMessage(params) {
+  const configuredModel = process.env.ANTHROPIC_MODEL?.trim();
+  const models = [...new Set([configuredModel, ...DEFAULT_ANTHROPIC_MODELS].filter(Boolean))];
+
+  for (let index = 0; index < models.length; index += 1) {
+    const model = models[index];
+    try {
+      return await getAnthropic().messages.create({ ...params, model });
+    } catch (error) {
+      const isUnavailableModel = error?.status === 404
+        && String(error?.message || '').toLowerCase().includes('model');
+      if (!isUnavailableModel || index === models.length - 1) throw error;
+      console.warn(`Anthropic model ${model} is unavailable; trying ${models[index + 1]}`);
+    }
+  }
+
+  throw new Error('No Anthropic image model is available');
 }
 
 /**
@@ -143,8 +164,7 @@ Only return the JSON object, no other text.`;
       ? "You are a helpful assistant that can accurately read and interpret images, especially price tags and barcodes. When shown a price tag: 1) FIRST look for any barcode and carefully read the numbers printed below it - this is critical for product identification. 2) Read the exact price. 3) Identify store name from logos or branding. 4) Extract product name and brand. Be extremely precise with numbers, especially barcode digits."
       : "You are an expert product identifier with exceptional visual analysis skills. You excel at accurately identifying products from photos, especially clothing and fashion items. For clothing, you carefully analyze garment construction, where it's worn on the body, necklines, sleeves, waistbands, and overall silhouette to correctly distinguish between different garment types (e.g., cardigans vs trousers, dresses vs jumpsuits). You never rush to conclusions and always verify your identification makes sense.";
     
-    const response = await getAnthropic().messages.create({
-      model: 'claude-opus-4-20250514',
+    const response = await createAnthropicMessage({
       max_tokens: 1024,
       system: systemPrompt,
       messages: [
@@ -274,8 +294,7 @@ Return as JSON:
 Focus on major retailers like Amazon, Walmart, Target, Best Buy, etc.
 Only return the JSON object, no other text.`;
 
-    const response = await getAnthropic().messages.create({
-      model: 'claude-opus-4-20250514',
+    const response = await createAnthropicMessage({
       max_tokens: 1024,
       messages: [
         { role: 'user', content: prompt }
