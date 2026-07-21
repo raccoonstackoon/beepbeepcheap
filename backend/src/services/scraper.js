@@ -2270,8 +2270,20 @@ export async function searchImageViaGoogleLens(imageUrl) {
       console.log(`   No product or visual matches were returned`);
     }
 
+    const unwrapMerchantUrl = (value) => {
+      try {
+        const parsed = new URL(value);
+        if (/google\./i.test(parsed.hostname)) {
+          const target = parsed.searchParams.get('url') || parsed.searchParams.get('q');
+          if (target && /^https?:\/\//i.test(target)) return target;
+        }
+        return parsed.href;
+      } catch {
+        return value || '';
+      }
+    };
+
     const results = visualMatches
-      .slice(0, 10)
       .map(item => {
         // Google Lens returns different structure than shopping
         const rawPrice = item.price?.extracted_value ?? item.price?.value ?? item.extracted_price ?? item.price ?? null;
@@ -2279,17 +2291,24 @@ export async function searchImageViaGoogleLens(imageUrl) {
           ? rawPrice
           : Number(String(rawPrice || '').replace(/[^0-9.]/g, '')) || null;
         const title = item.title || item.product_name || 'Unknown Product';
+        const rawCurrency = String(item.price?.currency || item.currency || rawPrice || '').toUpperCase();
+        const currency = rawCurrency.includes('£') || rawCurrency.includes('GBP') ? '£'
+          : rawCurrency.includes('€') || rawCurrency.includes('EUR') ? '€'
+            : rawCurrency.includes('$') || rawCurrency.includes('USD') ? '$'
+              : '£';
 
         return {
           title: title.substring(0, 200),
           price: price,
-          currency: item.price?.currency || item.currency || '£',
+          currency,
           storeName: item.source || item.domain || 'Unknown',
-          productUrl: item.link || item.url || '',
+          productUrl: unwrapMerchantUrl(item.link || item.url || ''),
           imageUrl: item.thumbnail || null,
         };
       })
-      .filter(r => r.title && r.productUrl); // Only items with title and URL
+      // A Lens link without a localized price cannot seed reliable tracking.
+      .filter(r => r.title && r.productUrl && Number.isFinite(r.price) && r.price > 0 && r.currency === '£')
+      .slice(0, 10);
 
     if (results.length > 0) {
       for (const r of results.slice(0, 3)) {

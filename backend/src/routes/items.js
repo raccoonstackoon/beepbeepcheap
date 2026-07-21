@@ -98,6 +98,22 @@ function hasTrustedGbpPrice(scraped) {
     && scraped.currency === 'GBP';
 }
 
+function trustedStoredOfferPrice(item) {
+  try {
+    const sources = typeof item?.tracked_sources === 'string'
+      ? JSON.parse(item.tracked_sources)
+      : item?.tracked_sources;
+    if (!Array.isArray(sources)) return null;
+    const prices = sources
+      .filter((source) => !source.currency || source.currency === '£' || source.currency === 'GBP')
+      .map((source) => Number(source.price))
+      .filter((price) => Number.isFinite(price) && price > 0);
+    return prices.length ? Math.min(...prices) : null;
+  } catch {
+    return null;
+  }
+}
+
 async function createFocusCrop(imagePath, filename, focusArea) {
   if (!focusArea) return { imagePath, filename };
 
@@ -386,9 +402,20 @@ router.post('/manual', (req, res) => {
       return res.status(400).json({ error: 'Item name is required' });
     }
 
+    const sanitizedSources = Array.isArray(tracked_sources)
+      ? tracked_sources.filter((source) => {
+          const price = Number(source?.price);
+          return source?.url && Number.isFinite(price) && price > 0;
+        })
+      : null;
+    const sourcePrices = (sanitizedSources || []).map((source) => Number(source.price));
+    const effectivePrice = current_price != null && current_price !== ''
+      ? Number(current_price)
+      : sourcePrices.length ? Math.min(...sourcePrices) : null;
+
     // Validate price is a reasonable number
-    if (current_price != null) {
-      const priceNum = parseFloat(current_price);
+    if (effectivePrice != null) {
+      const priceNum = Number(effectivePrice);
       if (isNaN(priceNum) || priceNum < 0 || priceNum > 1000000) {
         return res.status(400).json({ error: 'Invalid price value' });
       }
@@ -424,12 +451,12 @@ router.post('/manual', (req, res) => {
       url: url || null,
       image_url: finalImageUrl,
       store_name: store_name || null,
-      current_price: current_price ? parseFloat(current_price) : null,
-      original_price: current_price ? parseFloat(current_price) : null,
-      tracked_sources: tracked_sources || null
+      current_price: effectivePrice,
+      original_price: effectivePrice,
+      tracked_sources: sanitizedSources
     });
     
-    console.log(`📌 Added item manually: "${name}" at ${store_name || 'Unknown'} for £${current_price || 'N/A'}`);
+    console.log(`📌 Added item manually: "${name}" at ${store_name || 'Unknown'} for £${effectivePrice || 'N/A'}`);
     console.log(`   - Saved with image_url: ${item.image_url || 'NONE'}`);
     
     res.json(item);
@@ -541,7 +568,12 @@ router.post('/:id/refresh', async (req, res) => {
       console.log(`   - Bad store name: ${storeNameIsBad ? item.store_name : 'NO'}`);
       console.log(`   - URL needs fixing: ${!!fixedUrl}`);
       const scraped = await scrapeProduct(urlToScrape);
-      newPrice = hasTrustedGbpPrice(scraped) ? scraped.price : item.current_price;
+      newPrice = hasTrustedGbpPrice(scraped)
+        ? scraped.price
+        : (item.current_price ?? trustedStoredOfferPrice(item));
+      if (!hasTrustedGbpPrice(scraped) && newPrice != null) {
+        console.log(`   - Retailer scrape unavailable; preserving verified shopping price £${newPrice}`);
+      }
       newImageUrl = scraped.imageUrl;
       newStoreName = scraped.storeName;
       console.log(`   - Found image: ${newImageUrl ? 'YES' : 'NO'}`);

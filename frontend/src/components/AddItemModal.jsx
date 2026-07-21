@@ -484,6 +484,7 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
         url: opt.productUrl || null,
         imageUrl: fixUrl(opt.imageUrl || ''),
         price: opt.price || null,
+        currency: opt.currency || '£',
         storeName: opt.storeName || null,
       }));
 

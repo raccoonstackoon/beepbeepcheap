@@ -80,9 +80,15 @@ export function updateItemPrice(id, newPrice, offer = null) {
 
   if (!item) return null;
 
+  const candidatePrice = Number(newPrice);
+  if (!Number.isFinite(candidatePrice) || candidatePrice <= 0) {
+    console.warn(`Refusing to replace item ${id} price with invalid value: ${newPrice}`);
+    return item;
+  }
+
   // Ensure prices are numbers for accurate comparison
   const currentPrice = Number(item.current_price);
-  const newPriceNum = Number(newPrice);
+  const newPriceNum = candidatePrice;
   const lowestPrice = Number(item.lowest_price || newPriceNum);
 
   const lowest_price = Math.min(lowestPrice, newPriceNum);
