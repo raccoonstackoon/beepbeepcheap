@@ -28,6 +28,15 @@ async function safeJson(res) {
   try { return JSON.parse(text); } catch { throw new Error('Server returned an unexpected response.'); }
 }
 
+function safeExternalUrl(value) {
+  try {
+    const parsed = new URL(String(value || ''));
+    return ['http:', 'https:'].includes(parsed.protocol) ? parsed.href : null;
+  } catch {
+    return null;
+  }
+}
+
 export default function ItemDetail({ apiBase, onRefresh }) {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -390,6 +399,14 @@ export default function ItemDetail({ apiBase, onRefresh }) {
         {item.tracked_sources && (() => {
           let sources;
           try { sources = JSON.parse(item.tracked_sources); } catch { sources = null; }
+          if (Array.isArray(sources)) {
+            sources = sources
+              .map((source) => ({
+                ...source,
+                openUrl: safeExternalUrl(source.url || source.productUrl),
+              }))
+              .filter((source) => source.openUrl);
+          }
           if (!sources || sources.length <= 1) return null;
           
           const cheapest = Math.min(...sources.filter(s => s.price).map(s => s.price));
@@ -407,7 +424,7 @@ export default function ItemDetail({ apiBase, onRefresh }) {
                     className={`alternative-item ${source.price === cheapest ? 'is-cheaper' : 'is-more-expensive'}`}
                   >
                     <a 
-                      href={source.url}
+                      href={source.openUrl}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="alt-link"
@@ -432,6 +449,7 @@ export default function ItemDetail({ apiBase, onRefresh }) {
                         )}
                       </div>
                       <ExternalLink size={14} className="alt-external" />
+                      <span className="alt-open-label">Open store</span>
                     </a>
                   </div>
                 ))}

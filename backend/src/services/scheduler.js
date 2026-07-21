@@ -55,12 +55,12 @@ export async function checkAllPrices() {
               title: cheapestOffer.title,
               price: cheapestOffer.price,
               storeName: cheapestOffer.storeName,
-              productUrl: cheapestOffer.productUrl,
+              url: cheapestOffer.productUrl,
               imageUrl: cheapestOffer.imageUrl || item.image_url,
             };
-            const sourceKey = `${source.storeName}|${source.productUrl}`;
+            const sourceKey = `${source.storeName}|${source.url}`;
             trackedSources = [source, ...existing.filter((entry) =>
-              `${entry.storeName}|${entry.productUrl}` !== sourceKey
+              `${entry.storeName}|${entry.url || entry.productUrl}` !== sourceKey
             )].slice(0, 10);
           } catch {
             trackedSources = null;
@@ -144,7 +144,6 @@ export function stopScheduler() {
 export async function triggerPriceCheck() {
   return await checkAllPrices();
 }
-
 
 
 
