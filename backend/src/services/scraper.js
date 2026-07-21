@@ -2233,7 +2233,9 @@ export async function searchImageViaGoogleLens(imageUrl) {
       url: imageUrl,
       api_key: apiKey,
       hl: 'en',
-      country: 'uk',
+      country: 'gb',
+      type: 'products',
+      auto_crop: 'false',
     });
 
     const requestUrl = `https://serpapi.com/search.json?${params}`;
@@ -2247,7 +2249,8 @@ export async function searchImageViaGoogleLens(imageUrl) {
     }
 
     const data = await response.json();
-    const visualMatches = data.visual_matches || [];
+    const matchCandidates = data.visual_matches || data.product_results || data.exact_matches || [];
+    const visualMatches = Array.isArray(matchCandidates) ? matchCandidates : [];
 
     console.log(`✅ Google Lens returned ${visualMatches.length} matches`);
     if (visualMatches.length === 0) {
@@ -2258,13 +2261,16 @@ export async function searchImageViaGoogleLens(imageUrl) {
       .slice(0, 10)
       .map(item => {
         // Google Lens returns different structure than shopping
-        const price = item.price?.value ?? null;
+        const rawPrice = item.price?.extracted_value ?? item.price?.value ?? item.extracted_price ?? item.price ?? null;
+        const price = typeof rawPrice === 'number'
+          ? rawPrice
+          : Number(String(rawPrice || '').replace(/[^0-9.]/g, '')) || null;
         const title = item.title || item.product_name || 'Unknown Product';
 
         return {
           title: title.substring(0, 200),
           price: price,
-          currency: item.price?.currency || '£',
+          currency: item.price?.currency || item.currency || '£',
           storeName: item.source || item.domain || 'Unknown',
           productUrl: item.link || item.url || '',
           imageUrl: item.thumbnail || null,

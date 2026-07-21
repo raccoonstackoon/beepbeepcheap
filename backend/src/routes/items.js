@@ -1,11 +1,11 @@
 import express from 'express';
 import multer from 'multer';
 import path from 'path';
+import sharp from 'sharp';
 import { fileURLToPath } from 'url';
 import * as queries from '../database/queries.js';
 import { requireUserId } from '../middleware/userId.js';
-import { scrapeProduct, scrapePrice, searchShoppingSerpAPI, resolveMerchantOffers, searchCostco, getStoreName, normalizeProductUrl } from '../services/scraper.js';
-import { processImage } from '../services/imageProcessor.js';
+import { scrapeProduct, scrapePrice, searchShoppingSerpAPI, searchImageViaGoogleLens, resolveMerchantOffers, searchCostco, getStoreName, normalizeProductUrl } from '../services/scraper.js';
 
 const router = express.Router();
 
@@ -98,6 +98,34 @@ function hasTrustedGbpPrice(scraped) {
     && scraped.currency === 'GBP';
 }
 
+async function createFocusCrop(imagePath, filename, focusArea) {
+  if (!focusArea) return { imagePath, filename };
+
+  const source = await sharp(imagePath).rotate().toBuffer({ resolveWithObject: true });
+  const imageWidth = source.info.width;
+  const imageHeight = source.info.height;
+  const clamp = (value, min, max) => Math.min(max, Math.max(min, Number(value)));
+  const x = clamp(focusArea.x, 0, 100);
+  const y = clamp(focusArea.y, 0, 100);
+  const widthPercent = clamp(focusArea.width, 0.1, 100 - x);
+  const heightPercent = clamp(focusArea.height, 0.1, 100 - y);
+  const left = Math.min(imageWidth - 1, Math.floor((x / 100) * imageWidth));
+  const top = Math.min(imageHeight - 1, Math.floor((y / 100) * imageHeight));
+  const width = Math.max(1, Math.min(imageWidth - left, Math.round((widthPercent / 100) * imageWidth)));
+  const height = Math.max(1, Math.min(imageHeight - top, Math.round((heightPercent / 100) * imageHeight)));
+  const parsedName = path.parse(filename);
+  const croppedFilename = `${parsedName.name}-focus.jpg`;
+  const croppedPath = path.join(uploadsDir, croppedFilename);
+
+  await sharp(source.data)
+    .extract({ left, top, width, height })
+    .jpeg({ quality: 92 })
+    .toFile(croppedPath);
+
+  console.log(`✂️ Cropped Lens image: ${left},${top} ${width}x${height}`);
+  return { imagePath: croppedPath, filename: croppedFilename };
+}
+
 // POST /api/items/url-preview — scrape only; lets the UI confirm/edit before save
 router.post('/url-preview', async (req, res) => {
   try {
@@ -183,29 +211,15 @@ router.post('/url', async (req, res) => {
   }
 });
 
-// POST /api/items/image - Add item by product photo
-// NEW FLOW:
-// 1. Analyze image to detect brand/logo
-// 2. If no brand detected, return needsShopName=true so frontend asks user
-// 3. Once we have a brand, search the brand's official website for visually similar products
-// 4. Return the matching product URL from the brand's official site
-//
-// Params:
-// - identifyOnly=true: Just identify the product and check for brand (step 1-2)
-// - shopName: User-provided brand/shop name (for step 3)
+// POST /api/items/image - Crop to the user's selection and search Google Lens.
 router.post('/image', upload.single('image'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'Image is required' });
     }
     
-    const imagePath = req.file.path;
-    // Create full URL for the uploaded image (not just relative path)
     const host = req.get('host');
-    const protocol = req.protocol;
-    const imageUrl = `${protocol}://${host}/uploads/${req.file.filename}`;
-    const identifyOnly = req.body.identifyOnly === 'true';
-    const userProvidedShop = req.body.shopName?.trim() || null;
+    const protocol = String(req.get('x-forwarded-proto') || req.protocol).split(',')[0].trim();
     
     // Parse focus area if provided (from spotlight annotation)
     let focusArea = null;
@@ -218,122 +232,28 @@ router.post('/image', upload.single('image'), async (req, res) => {
       }
     }
     
-    console.log(`📸 Processing product image: ${imagePath}`);
-    if (identifyOnly) console.log(`   Mode: Identify only`);
-    if (userProvidedShop) console.log(`   User-provided brand: ${userProvidedShop}`);
-    
-    // ═══════════════════════════════════════════════════════════════════════
-    // STEP 1: Analyze image with AI to detect brand and identify product
-    // ═══════════════════════════════════════════════════════════════════════
-    const result = await processImage(imagePath, 'product', focusArea);
-    
-    if (!result.success) {
-      return res.status(400).json({ 
-        error: 'Failed to process image',
-        details: result.error 
-      });
-    }
-    
-    // Check if we detected a brand
-    const detectedBrand = result.brand && 
-                          result.brand.toLowerCase() !== 'unknown' && 
-                          result.brand.toLowerCase() !== 'null' &&
-                          result.brandConfidence !== 'none'
-                          ? result.brand : null;
-    
-    console.log(`🏷️ AI Analysis Results:`);
-    console.log(`   Product: ${result.itemName || 'Unknown'}`);
-    console.log(`   Brand: ${detectedBrand || 'Not detected'}`);
-    console.log(`   Confidence: ${result.brandConfidence || 'N/A'}`);
-    console.log(`   Source: ${result.brandSource || 'N/A'}`);
-    
-    // The brand to use (user-provided takes precedence)
-    const brandName = userProvidedShop || detectedBrand;
-    const hasBrand = !!brandName;
-    
-    // ═══════════════════════════════════════════════════════════════════════
-    // STEP 2: If identifyOnly mode, return identification results
-    // Frontend will check needsShopName to decide if user input is needed
-    // ═══════════════════════════════════════════════════════════════════════
-    if (identifyOnly) {
-      return res.json({
-        extracted: { 
-          ...result, 
-          brand: detectedBrand,
-          brandConfidence: result.brandConfidence,
-          brandSource: result.brandSource
-        },
-        localImageUrl: imageUrl,
-        hasBrand: hasBrand,
-        needsShopName: !hasBrand // Tell frontend to ask for brand name
-      });
-    }
-    
-    // ═══════════════════════════════════════════════════════════════════════
-    // STEP 3: SEARCH DUCKDUCKGO SHOPPING for cheapest prices
-    // Returns TOP 3 cheapest results for user to choose from
-    // ═══════════════════════════════════════════════════════════════════════
-    const productName = result.itemName || result.description || '';
-    
-    // Build search query: brand + product name (avoid duplicating brand if already in product name)
-    let searchQuery = productName;
-    if (brandName) {
-      const brandLower = brandName.toLowerCase();
-      const productLower = productName.toLowerCase();
-      // Only add brand if not already in product name
-      if (!productLower.includes(brandLower)) {
-        searchQuery = `${brandName} ${productName}`.trim();
-      }
-    }
-    
-    console.log(`🛒 Searching shopping for: "${searchQuery}"`);
-    
-    const shoppingResults = await searchShoppingSerpAPI(searchQuery);
-    
-    console.log(`📊 Found ${shoppingResults.results?.length || 0} shopping results`);
-    
-    // Filter results to ONLY show items from the specified store (if brand provided)
-    let filteredResults = shoppingResults.results || [];
-    
-    if (brandName) {
-      const brandLower = brandName.toLowerCase();
-      const beforeCount = filteredResults.length;
-      
-      filteredResults = filteredResults.filter(r => {
-        const storeLower = (r.storeName || '').toLowerCase();
-        const titleLower = (r.title || '').toLowerCase();
-        return storeLower.includes(brandLower) || titleLower.includes(brandLower);
-      });
-      
-      console.log(`🏪 Filtered to "${brandName}" only: ${filteredResults.length} of ${beforeCount} results`);
-    }
-    
-    // Claude/Google can return the same product from several merchants in an
-    // arbitrary order. Once the brand/product filter has established
-    // relevance, put the cheapest valid offer first.
-    filteredResults.sort((a, b) => {
-      const aPrice = Number(a.price) || Number.POSITIVE_INFINITY;
-      const bPrice = Number(b.price) || Number.POSITIVE_INFINITY;
-      return aPrice - bPrice;
-    });
+    const lensImage = await createFocusCrop(req.file.path, req.file.filename, focusArea);
+    const lensImageUrl = `${protocol}://${host}/uploads/${encodeURIComponent(lensImage.filename)}`;
+    console.log(`📸 Sending image directly to Google Lens: ${lensImageUrl}`);
+    const lensResults = await searchImageViaGoogleLens(lensImageUrl);
 
-    const topResults = await resolveMerchantOffers(filteredResults.slice(0, 3));
-    topResults.sort((a, b) => (Number(a.price) || Number.POSITIVE_INFINITY) - (Number(b.price) || Number.POSITIVE_INFINITY));
-    
-    for (const r of topResults) {
-      console.log(`   💰 ${r.currency || '£'}${r.price || 'N/A'} - ${r.title?.substring(0, 50)}... (${r.storeName})`);
+    if (lensResults.error === 'SERPAPI_KEY not configured') {
+      return res.status(503).json({ error: 'Google Lens search is not configured' });
     }
-    
-    res.json({
-      extracted: { 
-        ...result, 
-        brand: brandName || detectedBrand 
-      },
-      localImageUrl: imageUrl,
+    if (lensResults.error) {
+      return res.status(502).json({ error: 'Google Lens search failed', details: lensResults.error });
+    }
+
+    const allResults = lensResults.results || [];
+    const topResults = allResults.slice(0, 3);
+    return res.json({
+      extracted: topResults[0] ? { itemName: topResults[0].title } : null,
+      localImageUrl: lensImageUrl,
       shoppingOptions: topResults,
-      searchQuery: searchQuery,
-      totalResultsFound: shoppingResults.results?.length || 0,
-      searchMethod: 'serpapi',
+      totalResultsFound: allResults.length,
+      searchMethod: 'google_lens',
+      skipConfirmation: true,
+      noMatches: topResults.length === 0,
     });
     
   } catch (error) {

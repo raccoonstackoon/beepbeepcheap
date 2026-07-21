@@ -265,15 +265,23 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
         throw new Error(data.error || 'Failed to process image');
       }
 
-      // If Google Lens found results directly, show them immediately
-      if (data.skipConfirmation && data.shoppingOptions?.length > 0) {
-        console.log('✅ Google Lens found results — showing directly');
-        setExtractedData(data.extracted || {
-          itemName: data.shoppingOptions[0]?.title || 'Product',
-          localImageUrl: data.localImageUrl
-        });
-        setShoppingOptions(data.shoppingOptions);
-        setTrackIncluded(data.shoppingOptions.map((_, i) => i === 0));
+      // Google Lens is the complete photo flow; do not caption with an AI model.
+      if (data.skipConfirmation) {
+        if (data.shoppingOptions?.length > 0) {
+          console.log('✅ Google Lens found results — showing directly');
+          setExtractedData(data.extracted || {
+            itemName: data.shoppingOptions[0]?.title || 'Product',
+            localImageUrl: data.localImageUrl
+          });
+          setShoppingOptions(data.shoppingOptions);
+          setTrackIncluded(data.shoppingOptions.map((_, i) => i === 0));
+          setSearchResults(null);
+        } else {
+          setExtractedData({ itemName: 'Selected item', localImageUrl: data.localImageUrl });
+          setShoppingOptions([]);
+          setTrackIncluded([]);
+          setSearchResults({ found: false, error: 'Google Lens could not find a matching product.' });
+        }
         setNeedsShopName(false);
       } else {
         // Text-based fallback: show shop name confirmation screen
