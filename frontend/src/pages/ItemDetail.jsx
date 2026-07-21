@@ -539,6 +539,7 @@ export default function ItemDetail({ apiBase, onRefresh }) {
                           )}
                         </div>
                         <ExternalLink size={14} className="alt-link-icon" />
+                        <span className="alt-open-label">Open store</span>
                       </a>
                       
                       <button

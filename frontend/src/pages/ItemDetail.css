@@ -691,6 +691,29 @@
   transition: opacity 0.15s ease;
 }
 
+.alt-open-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: flex-start;
+  min-height: 32px;
+  margin-top: var(--space-xs);
+  padding: 6px 10px;
+  border: 1px solid var(--pixel-outline);
+  border-radius: var(--border-radius-md);
+  background: var(--bg-card);
+  color: var(--pixel-dark);
+  font-family: var(--font-pixel);
+  font-size: 10px;
+  font-weight: bold;
+}
+
+.alt-link:hover .alt-open-label,
+.alt-link:focus-visible .alt-open-label {
+  background: var(--pixel-teal);
+  color: white;
+}
+
 .alternative-item:hover .alt-link-icon {
   opacity: 1;
   color: var(--pixel-teal);

@@ -918,15 +918,33 @@ router.get('/:id/alternatives', async (req, res) => {
       .sort((a, b) => a.price - b.price)
       // Take top 3
       .slice(0, 3);
+
+    // Google Shopping can return an intermediate product page instead of the
+    // merchant URL. Resolve the visible results to direct seller links, then
+    // discard any result that still cannot be opened safely.
+    const resolvedAlternatives = (await resolveMerchantOffers(alternatives))
+      .map((alt) => {
+        try {
+          const productUrl = new URL(String(alt.productUrl || ''));
+          if (!['http:', 'https:'].includes(productUrl.protocol)) return null;
+          return { ...alt, productUrl: productUrl.href };
+        } catch {
+          return null;
+        }
+      })
+      .filter(Boolean)
+      .sort((a, b) => Number(a.price) - Number(b.price));
     
-    console.log(`✅ Found ${alternatives.length} matching alternatives (filtered from ${allResults.length} results: ${shoppingResults.results?.length || 0} SerpAPI + ${costcoResults.results?.length || 0} Costco)`);
+    console.log(`✅ Found ${resolvedAlternatives.length} matching alternatives (filtered from ${allResults.length} results: ${shoppingResults.results?.length || 0} SerpAPI + ${costcoResults.results?.length || 0} Costco)`);
     
     // Check if user has the best price (cheapest of all alternatives)
-    const cheapestAltPrice = alternatives.length > 0 ? alternatives[0].price : Infinity;
+    const cheapestAltPrice = resolvedAlternatives.length > 0
+      ? Math.min(...resolvedAlternatives.map((alt) => alt.price))
+      : Infinity;
     const hasBestPrice = currentPrice > 0 && currentPrice <= cheapestAltPrice;
     
     // Map alternatives with savings/extra cost info
-    const alternativesWithSavings = alternatives.map(alt => {
+    const alternativesWithSavings = resolvedAlternatives.map(alt => {
       const isCheaper = currentPrice > 0 && alt.price < currentPrice;
       const priceDiff = Math.abs(currentPrice - alt.price);
       return {
