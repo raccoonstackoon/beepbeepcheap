@@ -2228,33 +2228,46 @@ export async function searchImageViaGoogleLens(imageUrl) {
     console.log(`   Image URL: ${imageUrl}`);
 
     // SerpAPI Google Lens requires a publicly accessible image URL (not base64)
-    const params = new URLSearchParams({
-      engine: 'google_lens',
-      url: imageUrl,
-      api_key: apiKey,
-      hl: 'en',
-      country: 'gb',
-      type: 'products',
-      auto_crop: 'false',
-    });
+    let visualMatches = [];
+    let lastLensError = null;
+    for (const searchType of ['products', 'visual_matches']) {
+      const params = new URLSearchParams({
+        engine: 'google_lens',
+        url: imageUrl,
+        api_key: apiKey,
+        hl: 'en',
+        country: 'gb',
+        type: searchType,
+        auto_crop: 'false',
+      });
 
-    const requestUrl = `https://serpapi.com/search.json?${params}`;
-    console.log(`   Calling SerpAPI Google Lens...`);
-    const response = await fetch(requestUrl, { signal: AbortSignal.timeout(30000) });
+      const requestUrl = `https://serpapi.com/search.json?${params}`;
+      console.log(`   Calling SerpAPI Google Lens (${searchType})...`);
+      const response = await fetch(requestUrl, { signal: AbortSignal.timeout(30000) });
 
-    if (!response.ok) {
-      const body = await response.text();
-      console.error(`❌ Google Lens error ${response.status}: ${body.substring(0, 200)}`);
-      return { success: false, error: `SerpAPI ${response.status}`, results: [] };
+      if (!response.ok) {
+        const body = await response.text();
+        lastLensError = `SerpAPI ${response.status}`;
+        console.error(`❌ Google Lens error ${response.status}: ${body.substring(0, 200)}`);
+        continue;
+      }
+
+      const data = await response.json();
+      lastLensError = data.error || null;
+      const matchCandidates = data.visual_matches || data.product_results || data.exact_matches || [];
+      visualMatches = Array.isArray(matchCandidates) ? matchCandidates : [];
+      if (visualMatches.length > 0) break;
+
+      console.warn(`   Google Lens ${searchType} returned no matches${lastLensError ? `: ${lastLensError}` : ''}`);
     }
 
-    const data = await response.json();
-    const matchCandidates = data.visual_matches || data.product_results || data.exact_matches || [];
-    const visualMatches = Array.isArray(matchCandidates) ? matchCandidates : [];
+    if (visualMatches.length === 0 && lastLensError) {
+      return { success: false, error: lastLensError, results: [] };
+    }
 
     console.log(`✅ Google Lens returned ${visualMatches.length} matches`);
     if (visualMatches.length === 0) {
-      console.log(`   Response had: ${Object.keys(data).join(', ')}`);
+      console.log(`   No product or visual matches were returned`);
     }
 
     const results = visualMatches

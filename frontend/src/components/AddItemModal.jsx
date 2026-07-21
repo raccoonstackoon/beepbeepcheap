@@ -271,6 +271,11 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
 
       // Google Lens is the complete photo flow; do not caption with an AI model.
       if (data.skipConfirmation) {
+        // Camera capture and library upload converge here and must clear any
+        // state left by an earlier attempt before showing the Lens response.
+        setMode('product');
+        setSelectedOption(null);
+        setNeedsShopName(false);
         if (data.shoppingOptions?.length > 0) {
           console.log('✅ Google Lens found results — showing directly');
           setExtractedData(data.extracted || {
@@ -279,14 +284,15 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
           });
           setShoppingOptions(data.shoppingOptions);
           setTrackIncluded(data.shoppingOptions.map((_, i) => i === 0));
+          setBackupResults([]);
           setSearchResults(null);
         } else {
           setExtractedData({ itemName: 'Selected item', localImageUrl: data.localImageUrl });
           setShoppingOptions([]);
           setTrackIncluded([]);
+          setBackupResults([]);
           setSearchResults({ found: false, error: 'Google Lens could not find a matching product.' });
         }
-        setNeedsShopName(false);
       } else {
         // Text-based fallback: show shop name confirmation screen
         setIdentifiedProduct({
