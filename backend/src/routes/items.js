@@ -91,12 +91,14 @@ function normalizeItemUrl(raw) {
   }
 }
 
-function hasTrustedGbpPrice(scraped) {
+function hasTrustedPrice(scraped) {
   return scraped?.price != null
     && Number.isFinite(Number(scraped.price))
     && scraped.priceConfidence === 'high'
-    && scraped.currency === 'GBP';
+    && /^[A-Z]{3}$/.test(String(scraped.currency || ''));
 }
+
+const normalizeCurrency = (value) => ({ '£': 'GBP', '€': 'EUR', '$': 'USD', kr: 'SEK' }[value] || value || null);
 
 function trustedStoredOfferPrice(item) {
   try {
@@ -105,7 +107,7 @@ function trustedStoredOfferPrice(item) {
       : item?.tracked_sources;
     if (!Array.isArray(sources)) return null;
     const prices = sources
-      .filter((source) => !source.currency || source.currency === '£' || source.currency === 'GBP')
+      .filter((source) => !item.currency || normalizeCurrency(source.currency) === normalizeCurrency(item.currency))
       .map((source) => Number(source.price))
       .filter((price) => Number.isFinite(price) && price > 0);
     return prices.length ? Math.min(...prices) : null;
@@ -169,14 +171,13 @@ router.post('/url-preview', async (req, res) => {
     if (!scraped.imageUrl) {
       warnings.push('no_image');
     }
-    if (scraped.price != null && !hasTrustedGbpPrice(scraped)) warnings.push('check_price');
-    if (scraped.currency && scraped.currency !== 'GBP') warnings.push('unsupported_currency');
+    if (scraped.price != null && !hasTrustedPrice(scraped)) warnings.push('check_price');
     if (scraped.price != null && !scraped.currency) warnings.push('unknown_currency');
 
     res.json({
       name: scraped.name,
       url: normalizedUrl,
-      current_price: hasTrustedGbpPrice(scraped) ? scraped.price : null,
+      current_price: hasTrustedPrice(scraped) ? scraped.price : null,
       image_url: scraped.imageUrl,
       store_name: scraped.storeName,
       price_source: scraped.priceSource || null,
@@ -216,8 +217,9 @@ router.post('/url', async (req, res) => {
       url: normalizedUrl,
       image_url: scraped.imageUrl,
       store_name: scraped.storeName,
-      current_price: hasTrustedGbpPrice(scraped) ? scraped.price : null,
-      original_price: hasTrustedGbpPrice(scraped) ? scraped.price : null
+      current_price: hasTrustedPrice(scraped) ? scraped.price : null,
+      original_price: hasTrustedPrice(scraped) ? scraped.price : null,
+      currency: scraped.currency || null
     });
     
     res.json(item);
@@ -389,7 +391,7 @@ router.post('/search', async (req, res) => {
 // POST /api/items/manual - Add item manually (after image processing or manual entry)
 router.post('/manual', (req, res) => {
   try {
-    const { name, url, image_url, current_price, store_name, tracked_sources } = req.body;
+    const { name, url, image_url, current_price, currency, store_name, tracked_sources } = req.body;
     
     console.log(`📥 Manual item request received:`);
     console.log(`   - Name: ${name}`);
@@ -409,6 +411,7 @@ router.post('/manual', (req, res) => {
         })
       : null;
     const sourcePrices = (sanitizedSources || []).map((source) => Number(source.price));
+    const effectiveCurrency = normalizeCurrency(currency || sanitizedSources?.[0]?.currency) || 'GBP';
     const effectivePrice = current_price != null && current_price !== ''
       ? Number(current_price)
       : sourcePrices.length ? Math.min(...sourcePrices) : null;
@@ -453,6 +456,7 @@ router.post('/manual', (req, res) => {
       store_name: store_name || null,
       current_price: effectivePrice,
       original_price: effectivePrice,
+      currency: effectiveCurrency,
       tracked_sources: sanitizedSources
     });
     
@@ -553,6 +557,7 @@ router.post('/:id/refresh', async (req, res) => {
     let newPrice = null;
     let newImageUrl = null;
     let newStoreName = null;
+    let newCurrency = item.currency || 'GBP';
     
     // Check if store name is a bad/tracking domain that needs fixing
     const badStoreNames = ['links', 'duckduckgo', 'redbrain', 'unknown', 'shop', 'uk'];
@@ -568,14 +573,15 @@ router.post('/:id/refresh', async (req, res) => {
       console.log(`   - Bad store name: ${storeNameIsBad ? item.store_name : 'NO'}`);
       console.log(`   - URL needs fixing: ${!!fixedUrl}`);
       const scraped = await scrapeProduct(urlToScrape);
-      newPrice = hasTrustedGbpPrice(scraped)
+      newPrice = hasTrustedPrice(scraped)
         ? scraped.price
         : (item.current_price ?? trustedStoredOfferPrice(item));
-      if (!hasTrustedGbpPrice(scraped) && newPrice != null) {
+      if (!hasTrustedPrice(scraped) && newPrice != null) {
         console.log(`   - Retailer scrape unavailable; preserving verified shopping price £${newPrice}`);
       }
       newImageUrl = scraped.imageUrl;
       newStoreName = scraped.storeName;
+      if (hasTrustedPrice(scraped)) newCurrency = scraped.currency;
       console.log(`   - Found image: ${newImageUrl ? 'YES' : 'NO'}`);
       console.log(`   - Image URL: ${newImageUrl || 'NONE'}`);
       console.log(`   - Found store: ${newStoreName || 'NO'}`);
@@ -588,7 +594,7 @@ router.post('/:id/refresh', async (req, res) => {
     }
     
     // Update price
-    let updatedItem = queries.updateItemPrice(id, newPrice);
+    let updatedItem = queries.updateItemPrice(id, newPrice, { currency: newCurrency });
     
     // Update image, store name, and/or URL if needed
     const updates = {};

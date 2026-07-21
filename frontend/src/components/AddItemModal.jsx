@@ -66,7 +66,8 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
     url: '',
     price: '',
     imageUrl: '',
-    storeName: ''
+    storeName: '',
+    currency: 'GBP'
   });
 
   // When opened directly in photo mode, trigger file picker immediately
@@ -125,6 +126,7 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
             : '',
         imageUrl: data.image_url || '',
         storeName: data.store_name || '',
+        currency: data.currency || 'GBP',
       });
       setExtractedData({ fromUrlPaste: true, warnings });
       setSelectedOption({ manual: true, fromUrlPaste: true });
@@ -213,7 +215,7 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
     setShopNameInput('');
     setProductNameInput('');
     setIdentifiedProduct(null);
-    setManualData({ name: '', url: '', price: '', imageUrl: '', storeName: '' });
+    setManualData({ name: '', url: '', price: '', imageUrl: '', storeName: '', currency: 'GBP' });
     // Automatically move to annotation step
     setIsAnnotating(true);
   };
@@ -443,7 +445,8 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
       url: option.productUrl || '',
       price: option.price?.toString() || '',
       imageUrl: finalImageUrl,
-      storeName: option.storeName || ''
+      storeName: option.storeName || '',
+      currency: option.currency || '£'
     });
   };
   
@@ -495,6 +498,7 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
           url: main.productUrl || null,
           image_url: mainImageUrl || null,
           current_price: main.price || null,
+          currency: main.currency || '£',
           store_name: main.storeName || null,
           tracked_sources: trackedSources,
         }),
@@ -563,6 +567,7 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
           url: manualData.url.trim() || null,
           image_url: manualData.imageUrl || null,
           current_price: manualData.price ? parseFloat(manualData.price) : null,
+          currency: manualData.currency,
           store_name: manualData.storeName || null,
         }),
       });
@@ -594,7 +599,7 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
                 if (extractedData?.fromUrlPaste && selectedOption) {
                   setSelectedOption(null);
                   setExtractedData(null);
-                  setManualData({ name: '', url: '', price: '', imageUrl: '', storeName: '' });
+                  setManualData({ name: '', url: '', price: '', imageUrl: '', storeName: '', currency: 'GBP' });
                   return;
                 }
                 if (selectedOption || (searchResults && !searchResults.found)) {
@@ -977,7 +982,8 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
                     url: '',
                     price: '',
                     imageUrl: identifiedProduct?.localImageUrl || '',
-                    storeName: ''
+                    storeName: '',
+                    currency: 'GBP'
                   });
                 }}
               >
@@ -1094,7 +1100,7 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
               {selectedOption && !selectedOption.manual && manualData.price && (
                 <div className="selected-price-display">
                   <span className="price-label">Current price:</span>
-                  <span className="price-value">£{parseFloat(manualData.price).toFixed(2)}</span>
+                  <span className="price-value">{manualData.currency === 'EUR' || manualData.currency === '€' ? '€' : manualData.currency === 'USD' || manualData.currency === '$' ? '$' : manualData.currency === 'SEK' || manualData.currency === 'kr' ? 'kr ' : '£'}{parseFloat(manualData.price).toFixed(2)}</span>
                   <span className="price-store">at {manualData.storeName}</span>
                 </div>
               )}

@@ -42,6 +42,7 @@ export function createItem({
   store_name,
   current_price,
   original_price,
+  currency,
   tracked_sources,
 }) {
   const db = getDatabase();
@@ -51,8 +52,8 @@ export function createItem({
 
   const result = db
     .prepare(`
-    INSERT INTO items (user_id, name, url, image_url, store_name, current_price, original_price, lowest_price, last_checked, tracked_sources)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO items (user_id, name, url, image_url, store_name, current_price, original_price, lowest_price, last_checked, tracked_sources, currency)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `)
     .run(
       userId,
@@ -64,7 +65,8 @@ export function createItem({
       original_price,
       lowest_price,
       last_checked,
-      sourcesJson
+      sourcesJson,
+      currency || 'GBP'
     );
 
   if (current_price) {
@@ -86,6 +88,14 @@ export function updateItemPrice(id, newPrice, offer = null) {
     return item;
   }
 
+  const normalizeCurrency = (value) => ({ '£': 'GBP', '€': 'EUR', '$': 'USD', kr: 'SEK' }[value] || value || null);
+  const itemCurrency = normalizeCurrency(item.currency) || 'GBP';
+  const offerCurrency = normalizeCurrency(offer?.currency);
+  if (offerCurrency && offerCurrency !== itemCurrency) {
+    console.warn(`Refusing to compare ${offerCurrency} offer with ${itemCurrency} item ${id}`);
+    return item;
+  }
+
   // Ensure prices are numbers for accurate comparison
   const currentPrice = Number(item.current_price);
   const newPriceNum = candidatePrice;
@@ -104,7 +114,8 @@ export function updateItemPrice(id, newPrice, offer = null) {
     SET current_price = ?, lowest_price = ?, last_checked = ?,
         url = COALESCE(?, url),
         store_name = COALESCE(?, store_name),
-        tracked_sources = ?
+        tracked_sources = ?,
+        currency = COALESCE(?, currency)
     WHERE id = ?
   `
   ).run(
@@ -114,6 +125,7 @@ export function updateItemPrice(id, newPrice, offer = null) {
     offer?.productUrl || null,
     offer?.storeName || null,
     sourcesJson,
+    offerCurrency,
     id
   );
 

@@ -2306,8 +2306,9 @@ export async function searchImageViaGoogleLens(imageUrl) {
           imageUrl: item.thumbnail || null,
         };
       })
-      // A Lens link without a localized price cannot seed reliable tracking.
-      .filter(r => r.title && r.productUrl && Number.isFinite(r.price) && r.price > 0 && r.currency === '£')
+      // A Lens link without a price cannot seed reliable tracking. Preserve
+      // the actual currency rather than silently treating everything as GBP.
+      .filter(r => r.title && r.productUrl && Number.isFinite(r.price) && r.price > 0)
       .slice(0, 10);
 
     if (results.length > 0) {

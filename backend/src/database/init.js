@@ -48,6 +48,7 @@ export function initDatabase() {
       image_url TEXT,
       store_name TEXT,
       current_price REAL,
+      currency TEXT DEFAULT 'GBP',
       original_price REAL,
       lowest_price REAL,
       last_checked TEXT,
@@ -65,6 +66,12 @@ export function initDatabase() {
   // Add tracked_sources column (JSON array of alternative store listings for the same product)
   try {
     db.exec(`ALTER TABLE items ADD COLUMN tracked_sources TEXT`);
+  } catch (e) {
+    // Column already exists, ignore
+  }
+
+  try {
+    db.exec(`ALTER TABLE items ADD COLUMN currency TEXT DEFAULT 'GBP'`);
   } catch (e) {
     // Column already exists, ignore
   }

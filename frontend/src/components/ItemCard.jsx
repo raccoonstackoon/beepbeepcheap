@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import './ItemCard.css';
 import { apiFetch } from '../apiConfig.js';
+import { formatPrice } from '../currency.js';
 
 export default function ItemCard({ item, apiBase, onRefresh, style }) {
   const [refreshing, setRefreshing] = useState(false);
@@ -157,12 +158,12 @@ export default function ItemCard({ item, apiBase, onRefresh, style }) {
         
         <div className="item-price-row">
           <span className={`item-current-price price ${isDropped ? 'price-down' : ''}`}>
-            £{item.current_price?.toFixed(2) || '--'}
+            {formatPrice(item.current_price, item.currency)}
           </span>
           
           {item.original_price && item.original_price !== item.current_price && (
             <span className="item-original-price">
-              £{item.original_price.toFixed(2)}
+              {formatPrice(item.original_price, item.currency)}
             </span>
           )}
         </div>
