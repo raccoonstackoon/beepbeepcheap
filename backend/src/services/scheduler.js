@@ -1,8 +1,64 @@
 import cron from 'node-cron';
 import { getAllItems, updateItemPrice } from '../database/queries.js';
-import { findCheapestMatchingOffer, scrapePrice } from './scraper.js';
+import { findCheapestMatchingOffer, scrapePrice, verifyShoppingOffer } from './scraper.js';
 
 let schedulerTask = null;
+
+/** Run the exact verified refresh used by both cron and the refresh button. */
+export async function checkTrackedItem(item) {
+  let discoveryTracked = false;
+  try {
+    const sources = item.tracked_sources ? JSON.parse(item.tracked_sources) : [];
+    discoveryTracked = Array.isArray(sources) && sources.length > 0;
+  } catch {
+    discoveryTracked = false;
+  }
+
+  const discoveredOffer = discoveryTracked
+    ? await findCheapestMatchingOffer(item.name, item.currency || 'GBP')
+    : null;
+  let cheapestOffer = discoveredOffer ? await verifyShoppingOffer(discoveredOffer) : null;
+  let newPrice = cheapestOffer?.price ?? null;
+
+  if (newPrice === null) {
+    newPrice = await scrapePrice(item.url, item.current_price, item.currency);
+    cheapestOffer = null;
+  }
+  if (newPrice === null) return { checked: false, updated: false, item };
+
+  let trackedSources = null;
+  if (cheapestOffer) {
+    try {
+      const existing = item.tracked_sources ? JSON.parse(item.tracked_sources) : [];
+      const source = {
+        title: cheapestOffer.title,
+        price: cheapestOffer.price,
+        currency: cheapestOffer.currencyCode || item.currency,
+        storeName: cheapestOffer.storeName,
+        productUrl: cheapestOffer.productUrl,
+        imageUrl: cheapestOffer.imageUrl || item.image_url,
+      };
+      const sourceKey = `${source.storeName}|${source.productUrl}`;
+      trackedSources = [source, ...existing.filter((entry) =>
+        `${entry.storeName}|${entry.productUrl}` !== sourceKey
+      )].slice(0, 10);
+    } catch {
+      trackedSources = null;
+    }
+  }
+
+  const updatedItem = updateItemPrice(item.id, newPrice, cheapestOffer ? {
+    ...cheapestOffer,
+    tracked_sources: trackedSources,
+  } : null, cheapestOffer?.currencyCode || item.currency);
+
+  return {
+    checked: true,
+    updated: Number(item.current_price) !== Number(newPrice),
+    item: updatedItem,
+    offer: cheapestOffer,
+  };
+}
 
 /**
  * Check prices for all tracked items
@@ -22,62 +78,18 @@ export async function checkAllPrices() {
   for (const item of itemsWithUrls) {
     try {
       console.log(`Checking: ${item.name}`);
-      // Search/image-created items carry tracked_sources and may move between
-      // retailers. A user-supplied exact URL has no tracked_sources and must
-      // remain pinned to that page.
-      let discoveryTracked = false;
-      try {
-        const sources = item.tracked_sources ? JSON.parse(item.tracked_sources) : [];
-        discoveryTracked = Array.isArray(sources) && sources.length > 0;
-      } catch {
-        discoveryTracked = false;
-      }
-
-      let cheapestOffer = discoveryTracked
-        ? await findCheapestMatchingOffer(item.name)
-        : null;
-      let newPrice = cheapestOffer?.price ?? null;
-
-      // Exact-URL items always take this path. Search-created items use it as
-      // a fallback when shopping discovery is temporarily unavailable.
-      if (newPrice === null) {
-        newPrice = await scrapePrice(item.url, item.current_price);
-        cheapestOffer = null;
-      }
-
-      if (newPrice !== null) {
+      const result = await checkTrackedItem(item);
+      if (result.checked) {
+        const newPrice = result.item.current_price;
+        const cheapestOffer = result.offer;
         const oldPrice = item.current_price;
-        let trackedSources = null;
-        if (cheapestOffer) {
-          try {
-            const existing = item.tracked_sources ? JSON.parse(item.tracked_sources) : [];
-            const source = {
-              title: cheapestOffer.title,
-              price: cheapestOffer.price,
-              storeName: cheapestOffer.storeName,
-              url: cheapestOffer.productUrl,
-              imageUrl: cheapestOffer.imageUrl || item.image_url,
-            };
-            const sourceKey = `${source.storeName}|${source.url}`;
-            trackedSources = [source, ...existing.filter((entry) =>
-              `${entry.storeName}|${entry.url || entry.productUrl}` !== sourceKey
-            )].slice(0, 10);
-          } catch {
-            trackedSources = null;
-          }
-        }
-
-        updateItemPrice(item.id, newPrice, cheapestOffer ? {
-          ...cheapestOffer,
-          tracked_sources: trackedSources,
-        } : null);
         checked++;
 
         if (cheapestOffer && (item.url !== cheapestOffer.productUrl || item.store_name !== cheapestOffer.storeName)) {
           console.log(`  🏪 Cheapest seller: ${cheapestOffer.storeName} (£${Number(newPrice).toFixed(2)})`);
         }
 
-        if (oldPrice !== newPrice) {
+        if (result.updated) {
           updated++;
           const changePercent = ((newPrice - oldPrice) / oldPrice * 100).toFixed(1);
           const direction = newPrice < oldPrice ? '📉' : '📈';
@@ -144,9 +156,6 @@ export function stopScheduler() {
 export async function triggerPriceCheck() {
   return await checkAllPrices();
 }
-
-
-
 
 
 

@@ -48,13 +48,20 @@ export function initDatabase() {
       image_url TEXT,
       store_name TEXT,
       current_price REAL,
-      currency TEXT DEFAULT 'GBP',
       original_price REAL,
       lowest_price REAL,
+      currency TEXT DEFAULT 'GBP',
       last_checked TEXT,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )
   `);
+
+  try {
+    db.exec(`ALTER TABLE items ADD COLUMN currency TEXT DEFAULT 'GBP'`);
+  } catch (e) {
+    if (!String(e.message).includes('duplicate column name')) throw e;
+  }
+  db.exec(`UPDATE items SET currency = 'GBP' WHERE currency IS NULL OR TRIM(currency) = ''`);
   
   // Add store_name column if it doesn't exist (for existing databases)
   try {
@@ -66,12 +73,6 @@ export function initDatabase() {
   // Add tracked_sources column (JSON array of alternative store listings for the same product)
   try {
     db.exec(`ALTER TABLE items ADD COLUMN tracked_sources TEXT`);
-  } catch (e) {
-    // Column already exists, ignore
-  }
-
-  try {
-    db.exec(`ALTER TABLE items ADD COLUMN currency TEXT DEFAULT 'GBP'`);
   } catch (e) {
     // Column already exists, ignore
   }

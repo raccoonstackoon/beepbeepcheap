@@ -1,9 +1,8 @@
 import express from 'express';
 import * as queries from '../database/queries.js';
-import { requireUserId } from '../middleware/userId.js';
 
 const router = express.Router();
-router.use(requireUserId);
+// userId is set by optionalAuth middleware in index.js
 
 // GET /api/alerts - Get all alerts for this user
 router.get('/', (req, res) => {

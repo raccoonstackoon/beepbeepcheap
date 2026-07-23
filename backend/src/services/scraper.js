@@ -87,12 +87,11 @@ const TRACKING_QUERY_PARAMS = new Set([
   'fbclid', 'msclkid', 'dclid', 'mc_cid', 'mc_eid',
 ]);
 
-/** Remove disposable advertising data without changing product/variant identity. */
+/** Keep product/variant identity while removing disposable advertising parameters. */
 export function normalizeProductUrl(rawUrl) {
   const parsed = new URL(String(rawUrl || '').trim());
   for (const key of [...parsed.searchParams.keys()]) {
-    const lowerKey = key.toLowerCase();
-    if (lowerKey.startsWith('utm_') || TRACKING_QUERY_PARAMS.has(lowerKey)) {
+    if (key.toLowerCase().startsWith('utm_') || TRACKING_QUERY_PARAMS.has(key.toLowerCase())) {
       parsed.searchParams.delete(key);
     }
   }
@@ -107,43 +106,46 @@ function absoluteImageUrl(candidate, origin) {
   return value.startsWith('//') ? `https:${value}` : new URL(value, origin).href;
 }
 
-/** Shopify's product endpoint reliably identifies the selected variant. */
+/** Shopify's product endpoint is more reliable than theme-specific DOM markup. */
 async function getShopifyProductData(pageUrl) {
   try {
     const parsed = new URL(pageUrl);
-    const productMatch = parsed.pathname.match(/\/products\/([^/]+)/i);
+    const productMatch = parsed.pathname.match(/^\/products\/([^/]+)/i);
     if (!productMatch) return null;
 
-    const productJsonUrl = new URL(`${parsed.pathname.slice(0, productMatch.index)}/products/${productMatch[1]}.js`, parsed.origin);
-    // Shopify localizes storefront prices from the server's location unless a
-    // market is explicit. The app stores GBP prices, so always request the UK
-    // market rather than relying on the deployment region.
-    productJsonUrl.searchParams.set('country', 'GB');
+    const productJsonUrl = new URL(`/products/${productMatch[1]}.js`, parsed.origin);
     const response = await fetch(productJsonUrl, {
-      headers: { Accept: 'application/json', 'Accept-Language': 'en-GB,en;q=0.9' },
+      headers: {
+        Accept: 'application/json',
+        // Ask Shopify for the same UK market that the price tracker supports.
+        // Without this, a .com shop can return a geo-localised USD/EUR amount
+        // which was previously saved as if it were GBP.
+        'Accept-Language': 'en-GB,en;q=0.9',
+      },
       signal: AbortSignal.timeout(10000),
     });
     if (!response.ok) return null;
 
     const product = await response.json();
-    if (!product?.title || !Array.isArray(product.variants) || product.variants.length === 0) return null;
+    if (!product || !Array.isArray(product.variants) || !product.title) return null;
     const selectedVariantId = parsed.searchParams.get('variant');
     const selectedVariant = selectedVariantId
       ? product.variants?.find((variant) => String(variant.id) === selectedVariantId)
       : null;
     const variant = selectedVariant || product.variants.find((entry) => entry.available) || product.variants[0];
-    const price = Number(variant?.price ?? product.price) / 100;
+    const rawPrice = variant?.price ?? product.price;
+    const price = Number(rawPrice) / 100;
     const candidate = selectedVariant?.featured_image?.src
       || selectedVariant?.featured_image
       || product.featured_image
       || product.images?.[0];
     const absolute = absoluteImageUrl(candidate, parsed.origin);
 
+    // product.js does not include a currency. Shopify's cart endpoint does and
+    // reflects the active market, so never guess based solely on a .com domain.
     let currency = null;
     try {
-      const cartUrl = new URL('/cart.js', parsed.origin);
-      cartUrl.searchParams.set('country', 'GB');
-      const cartResponse = await fetch(cartUrl, {
+      const cartResponse = await fetch(new URL('/cart.js', parsed.origin), {
         headers: { Accept: 'application/json', 'Accept-Language': 'en-GB,en;q=0.9' },
         signal: AbortSignal.timeout(5000),
       });
@@ -152,7 +154,7 @@ async function getShopifyProductData(pageUrl) {
         currency = String(cart?.currency || '').toUpperCase() || null;
       }
     } catch {
-      // Unknown currency is deliberately returned as unverified.
+      // The caller will treat an unknown currency as unverified.
     }
 
     return {
@@ -254,13 +256,18 @@ export async function scrapeProduct(url, navigationRetry = 0) {
     url = normalizeProductUrl(url);
     console.log(`🔍 Starting scrape for: ${url}`);
 
+    // Shopify exposes the selected variant directly. Using it first avoids
+    // accidentally reading a compare-at price, cart total, or another variant.
     const shopifyData = await getShopifyProductData(url);
     if (shopifyData?.price) {
+      console.log(`✅ Shopify product data: £${shopifyData.price} (${shopifyData.variantId || 'default variant'})`);
       return {
         success: true,
         name: shopifyData.name,
         price: shopifyData.price,
         priceSource: 'shopify_variant',
+        // A numeric Shopify price is authoritative only when its currency is
+        // known. This prevents a USD/EUR number being persisted as pounds.
         priceConfidence: shopifyData.currency ? 'high' : 'medium',
         currency: shopifyData.currency,
         imageUrl: shopifyData.imageUrl,
@@ -388,12 +395,11 @@ export async function scrapeProduct(url, navigationRetry = 0) {
           }
         }
         
-        // For COS specifically - handle country selector
+        // For COS specifically - keep the product in the UK/GBP storefront.
         if (url.includes('cos.com')) {
           try {
-            // Try clicking on USA in the country selector
+            // Try clicking on the UK in the country selector.
             await page.evaluate(() => {
-              // Keep the product in the UK/GBP storefront.
               const links = document.querySelectorAll('a');
               for (const link of links) {
                 if (link.textContent.includes('United Kingdom') ||
@@ -416,13 +422,12 @@ export async function scrapeProduct(url, navigationRetry = 0) {
               return false;
             });
             
-            console.log('Attempted to select US country');
+            console.log('Attempted to select UK country');
             await new Promise(resolve => setTimeout(resolve, 3000));
             
             // Check if we're still on the country selector page
             const pageTitle = await page.title();
             if (pageTitle.includes('Select') || pageTitle.includes('Country')) {
-              // Try refreshing the page with the US URL
               const ukUrl = url.replace('en_usd', 'en_gbp').replace('/us/', '/gb/');
               if (ukUrl !== url) {
                 console.log(`Navigating to UK URL: ${ukUrl}`);
@@ -531,70 +536,80 @@ export async function scrapeProduct(url, navigationRetry = 0) {
       let price = null;
       let priceSource = null;
       let priceConfidence = 'low';
-      let currency = null;
+      let detectedPriceCurrency = null;
       
       // Helper to extract price from JSON-LD structured data
-      // Only returns a GBP offer belonging to the product page. Pages often
-      // embed additional Product records for recommendations and accessories.
+      // Prefers GBP offers; falls back to first available price
       const getJsonLdPrice = () => {
         try {
-          const currentPath = location.pathname.replace(/\/$/, '');
           const candidates = [];
-          const matchesPage = (value) => {
+          const selectedVariant = new URL(location.href).searchParams.get('variant');
+          const currentPath = new URL(location.href).pathname.replace(/\/$/, '');
+          const canonicalHref = document.querySelector('link[rel="canonical"]')?.href || location.href;
+          const urlMatchesPage = (value) => {
             if (!value) return false;
-            try { return new URL(String(value), location.href).pathname.replace(/\/$/, '') === currentPath; }
-            catch { return false; }
+            try {
+              return new URL(String(value), location.href).pathname.replace(/\/$/, '') === currentPath;
+            } catch {
+              return false;
+            }
           };
           for (const product of getJsonLdProducts()) {
             if (product?.offers) {
-              const productMatch = matchesPage(product.url || product['@id']);
+              let productScore = 0;
+              if (urlMatchesPage(product.url || product['@id'])) productScore += 12;
+              const mainEntityUrl = product.mainEntityOfPage?.['@id'] || product.mainEntityOfPage;
+              if (mainEntityUrl && (urlMatchesPage(mainEntityUrl) || mainEntityUrl === canonicalHref)) productScore += 8;
               const offers = Array.isArray(product.offers) ? product.offers : [product.offers];
               for (const offer of offers) {
-                const offerCurrency = String(offer.priceCurrency || offer.priceSpecification?.priceCurrency || '').toUpperCase();
-                const value = cleanPrice(String(offer.price ?? offer.lowPrice ?? offer.priceSpecification?.price ?? ''));
-                if (offerCurrency !== 'GBP' || !value || value <= 0 || value >= 100000) continue;
-                let score = productMatch ? 12 : 0;
-                if (matchesPage(offer.url)) score += 10;
+                const rawPrice = offer.price ?? offer.lowPrice ?? offer.priceSpecification?.price;
+                const parsedPrice = cleanPrice(String(rawPrice ?? ''));
+                if (!parsedPrice || parsedPrice <= 0 || parsedPrice >= 100000) continue;
+                const currency = String(offer.priceCurrency || offer.priceSpecification?.priceCurrency || '').toUpperCase();
+                const offerUrl = String(offer.url || '');
+                let score = productScore + (currency === 'GBP' ? 5 : currency ? 0 : 2);
+                if (urlMatchesPage(offerUrl)) score += 10;
                 if (/instock/i.test(String(offer.availability || ''))) score += 2;
-                candidates.push({ value, score });
+                if (selectedVariant && offerUrl.includes(`variant=${selectedVariant}`)) score += 10;
+                candidates.push({ price: parsedPrice, currency: currency || null, score });
               }
             }
           }
           candidates.sort((a, b) => b.score - a.score);
-          return candidates[0]?.value ?? null;
+          return candidates[0] ?? null;
         } catch (e) {}
         return null;
       };
-
-      // Structured product offers and commerce meta tags are the only generic
-      // sources authoritative enough to save automatically for every retailer.
-      price = getJsonLdPrice();
-      if (price) {
+      
+      // Structured offers identify the actual product price and should beat
+      // generic elements such as cart totals, recommendations, and strike-through prices.
+      const jsonLdPrice = getJsonLdPrice();
+      if (jsonLdPrice) {
+        price = jsonLdPrice.price;
+        detectedPriceCurrency = jsonLdPrice.currency;
         priceSource = 'json_ld';
         priceConfidence = 'high';
-        currency = 'GBP';
       }
+
+      // Product meta tags are supplied specifically for commerce integrations.
       if (!price) {
         const metaPrice = getAttr('meta[property="product:price:amount"]', 'content')
-          || getAttr('meta[property="og:price:amount"]', 'content');
-        const metaCurrency = String(
-          getAttr('meta[property="product:price:currency"]', 'content')
-          || getAttr('meta[itemprop="priceCurrency"]', 'content')
-          || ''
-        ).toUpperCase();
+          || getAttr('meta[property="og:price:amount"]', 'content')
+          || getAttr('meta[itemprop="price"]', 'content');
         const parsedMetaPrice = cleanPrice(metaPrice);
-        if (metaCurrency === 'GBP' && parsedMetaPrice && parsedMetaPrice > 0 && parsedMetaPrice < 100000) {
+        if (parsedMetaPrice && parsedMetaPrice > 0 && parsedMetaPrice < 100000) {
           price = parsedMetaPrice;
           priceSource = 'product_meta';
           priceConfidence = 'high';
-          currency = 'GBP';
         }
       }
-      
-      // For certain stores, prioritize JSON-LD as it's more accurate
+
+      // Some stores need additional structured-data fallbacks.
       if (!price && jsonLdPriorityStores.includes(store)) {
-        price = getJsonLdPrice();
-        if (price) {
+        const priorityJsonLdPrice = getJsonLdPrice();
+        if (priorityJsonLdPrice) {
+          price = priorityJsonLdPrice.price;
+          detectedPriceCurrency = priorityJsonLdPrice.currency;
           console.log(`Found price from JSON-LD for ${store}: ${price}`);
         }
         
@@ -717,6 +732,8 @@ export async function scrapeProduct(url, navigationRetry = 0) {
             const parsedPrice = cleanPrice(priceText);
             if (parsedPrice && parsedPrice > 0 && parsedPrice < 100000) {
               price = parsedPrice;
+              priceSource = `store_selector:${selector}`;
+              priceConfidence = 'medium';
               console.log(`Found price with selector ${selector}: ${price}`);
               break;
             }
@@ -724,7 +741,9 @@ export async function scrapeProduct(url, navigationRetry = 0) {
         }
       }
       
-      // Generic price selectors as fallback
+      // Generic fallback: score every candidate in product context. Never use
+      // the first `.price` element—it is often shipping, finance, a cart total,
+      // a recommendation, or a crossed-out compare-at price.
       if (!price) {
         const genericPriceSelectors = [
           '[itemprop="price"]',
@@ -743,15 +762,36 @@ export async function scrapeProduct(url, navigationRetry = 0) {
           '[class*="Price"]',
         ];
         
+        const candidates = [];
+        const seen = new Set();
         for (const selector of genericPriceSelectors) {
-          try {
-            const priceText = getText(selector);
-            const parsedPrice = cleanPrice(priceText);
-            if (parsedPrice && parsedPrice > 0 && parsedPrice < 100000) {
-              price = parsedPrice;
-              break;
-            }
-          } catch (e) {}
+          for (const el of document.querySelectorAll(selector)) {
+            if (seen.has(el)) continue;
+            seen.add(el);
+            const text = String(el.textContent || el.getAttribute('content') || el.getAttribute('data-price') || '').trim();
+            const parsedPrice = cleanPrice(text);
+            if (!parsedPrice || parsedPrice <= 0 || parsedPrice >= 100000) continue;
+
+            const contextEl = el.closest('[class], [id], main, article, section') || el;
+            const context = `${el.className || ''} ${el.id || ''} ${contextEl.className || ''} ${contextEl.id || ''} ${text}`.toLowerCase();
+            let score = 0;
+            if (el.matches('[itemprop="price"], [data-price]')) score += 8;
+            if (/(current|sale|now|offer|final|product[-_ ]?price|price[-_ ]?current)/.test(context)) score += 6;
+            if (el.closest('main, article, [role="main"]')) score += 3;
+            if (/(was|before|regular|original|compare|rrp|list[-_ ]?price|strike|crossed|old[-_ ]?price)/.test(context)) score -= 6;
+            if (/(shipping|delivery|instal|installment|monthly|month|finance|klarna|afterpay|deposit|tax|saving)/.test(context)) score -= 10;
+            if (/(cart|basket|subtotal|total|recommend|related|recently|upsell|cross[-_ ]?sell)/.test(context)) score -= 8;
+            if (el.closest('header, nav, footer, aside, del, s')) score -= 8;
+            const style = window.getComputedStyle(el);
+            if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0) score -= 20;
+            candidates.push({ value: parsedPrice, score, text: text.slice(0, 120) });
+          }
+        }
+        candidates.sort((a, b) => b.score - a.score);
+        if (candidates[0] && candidates[0].score >= 2) {
+          price = candidates[0].value;
+          priceSource = 'scored_dom';
+          priceConfidence = candidates[0].score >= 8 ? 'medium' : 'low';
         }
       }
       
@@ -765,24 +805,12 @@ export async function scrapeProduct(url, navigationRetry = 0) {
             const parsed = cleanPrice(match);
             if (parsed && parsed >= 1 && parsed <= 10000) {
               price = parsed;
+              priceSource = 'page_text';
+              priceConfidence = 'low';
               break;
             }
           }
         }
-      }
-      
-      // Try meta tags
-      if (!price) {
-        const metaPrice = getAttr('meta[property="product:price:amount"]', 'content') ||
-                         getAttr('meta[property="og:price:amount"]', 'content');
-        if (metaPrice) {
-          price = parseFloat(metaPrice);
-        }
-      }
-      
-      // Try JSON-LD structured data for price
-      if (!price) {
-        price = getJsonLdPrice();
       }
       
       // ========== NAME EXTRACTION ==========
@@ -1278,6 +1306,11 @@ export async function scrapeProduct(url, navigationRetry = 0) {
         }
       }
       
+      const currency = detectedPriceCurrency || String(
+        getAttr('meta[property="product:price:currency"]', 'content')
+        || getAttr('meta[itemprop="priceCurrency"]', 'content')
+        || ''
+      ).toUpperCase() || null;
       return { name, price, priceSource, priceConfidence, currency, imageUrl, pageTitle: document.title };
     }, storeName);
     
@@ -1306,12 +1339,6 @@ export async function scrapeProduct(url, navigationRetry = 0) {
     // Shopify exposes stable product JSON even when a theme's og:image is
     // broken or its gallery is rendered dynamically. Prefer the selected
     // variant image when the URL includes ?variant=... .
-    const shopifyImage = (await getShopifyProductData(finalUrl))?.imageUrl;
-    if (shopifyImage) {
-      resolvedImageUrl = shopifyImage;
-      console.log(`Found Shopify product image: ${shopifyImage}`);
-    }
-    
     // Final name extraction if still missing (server-side)
     let finalName = productInfo.name;
     
@@ -1420,7 +1447,7 @@ export async function scrapeProduct(url, navigationRetry = 0) {
  * @param {number|null} previousPrice - Last known price (used for validation)
  * @returns {number|null} - Validated price, or previous price if uncertain
  */
-export async function scrapePrice(url, previousPrice = null) {
+export async function scrapePrice(url, previousPrice = null, previousCurrency = null) {
   console.log(`💰 Daily price check for: ${url}`);
   if (previousPrice) console.log(`   Previous price: £${previousPrice}`);
 
@@ -1431,8 +1458,12 @@ export async function scrapePrice(url, previousPrice = null) {
     return previousPrice;
   }
   const price1 = result1.price;
-  if (result1.priceConfidence !== 'high' || result1.currency !== 'GBP') {
-    console.log(`   ⚠️ Unverified GBP product price — keeping previous price`);
+  if (result1.priceConfidence !== 'high' || !result1.currency) {
+    console.log(`   ⚠️ Unverified currency (${result1.priceSource}, ${result1.currency || 'unknown currency'}) — not recording it`);
+    return previousPrice;
+  }
+  if (previousCurrency && result1.currency !== previousCurrency) {
+    console.log(`   ⚠️ Currency changed (${previousCurrency} → ${result1.currency}) — not comparing unlike currencies`);
     return previousPrice;
   }
   console.log(`   Scrape 1: £${price1}`);
@@ -1448,12 +1479,12 @@ export async function scrapePrice(url, previousPrice = null) {
     return price1;
   }
 
-  // Price is different — verify with a second scrape
+  // Authoritative price is different — verify with a second scrape
   console.log(`   ⚠️ Price differs from previous — running verification scrape`);
   await new Promise(resolve => setTimeout(resolve, 3000));
 
   const result2 = await scrapeProduct(url);
-  if (!result2.success || !result2.price || result2.priceConfidence !== 'high' || result2.currency !== 'GBP') {
+  if (!result2.success || !result2.price || result2.priceConfidence !== 'high' || result2.currency !== result1.currency) {
     console.log(`   Verification scrape failed — keeping previous price`);
     return previousPrice;
   }
@@ -2228,88 +2259,49 @@ export async function searchImageViaGoogleLens(imageUrl) {
     console.log(`   Image URL: ${imageUrl}`);
 
     // SerpAPI Google Lens requires a publicly accessible image URL (not base64)
-    let visualMatches = [];
-    let lastLensError = null;
-    for (const searchType of ['products', 'visual_matches']) {
-      const params = new URLSearchParams({
-        engine: 'google_lens',
-        url: imageUrl,
-        api_key: apiKey,
-        hl: 'en',
-        country: 'gb',
-        type: searchType,
-        auto_crop: 'false',
-      });
+    const params = new URLSearchParams({
+      engine: 'google_lens',
+      url: imageUrl,
+      api_key: apiKey,
+      hl: 'en',
+      country: 'uk',
+    });
 
-      const requestUrl = `https://serpapi.com/search.json?${params}`;
-      console.log(`   Calling SerpAPI Google Lens (${searchType})...`);
-      const response = await fetch(requestUrl, { signal: AbortSignal.timeout(30000) });
+    const requestUrl = `https://serpapi.com/search.json?${params}`;
+    console.log(`   Calling SerpAPI Google Lens...`);
+    const response = await fetch(requestUrl, { signal: AbortSignal.timeout(30000) });
 
-      if (!response.ok) {
-        const body = await response.text();
-        lastLensError = `SerpAPI ${response.status}`;
-        console.error(`❌ Google Lens error ${response.status}: ${body.substring(0, 200)}`);
-        continue;
-      }
-
-      const data = await response.json();
-      lastLensError = data.error || null;
-      const matchCandidates = data.visual_matches || data.product_results || data.exact_matches || [];
-      visualMatches = Array.isArray(matchCandidates) ? matchCandidates : [];
-      if (visualMatches.length > 0) break;
-
-      console.warn(`   Google Lens ${searchType} returned no matches${lastLensError ? `: ${lastLensError}` : ''}`);
+    if (!response.ok) {
+      const body = await response.text();
+      console.error(`❌ Google Lens error ${response.status}: ${body.substring(0, 200)}`);
+      return { success: false, error: `SerpAPI ${response.status}`, results: [] };
     }
 
-    if (visualMatches.length === 0 && lastLensError) {
-      return { success: false, error: lastLensError, results: [] };
-    }
+    const data = await response.json();
+    const visualMatches = data.visual_matches || [];
 
     console.log(`✅ Google Lens returned ${visualMatches.length} matches`);
     if (visualMatches.length === 0) {
-      console.log(`   No product or visual matches were returned`);
+      console.log(`   Response had: ${Object.keys(data).join(', ')}`);
     }
 
-    const unwrapMerchantUrl = (value) => {
-      try {
-        const parsed = new URL(value);
-        if (/google\./i.test(parsed.hostname)) {
-          const target = parsed.searchParams.get('url') || parsed.searchParams.get('q');
-          if (target && /^https?:\/\//i.test(target)) return target;
-        }
-        return parsed.href;
-      } catch {
-        return value || '';
-      }
-    };
-
     const results = visualMatches
+      .slice(0, 10)
       .map(item => {
         // Google Lens returns different structure than shopping
-        const rawPrice = item.price?.extracted_value ?? item.price?.value ?? item.extracted_price ?? item.price ?? null;
-        const price = typeof rawPrice === 'number'
-          ? rawPrice
-          : Number(String(rawPrice || '').replace(/[^0-9.]/g, '')) || null;
+        const price = item.price?.value ?? null;
         const title = item.title || item.product_name || 'Unknown Product';
-        const rawCurrency = String(item.price?.currency || item.currency || rawPrice || '').toUpperCase();
-        const currency = rawCurrency.includes('£') || rawCurrency.includes('GBP') ? '£'
-          : rawCurrency.includes('€') || rawCurrency.includes('EUR') ? '€'
-            : rawCurrency.includes('$') || rawCurrency.includes('USD') ? '$'
-              : '£';
 
         return {
           title: title.substring(0, 200),
           price: price,
-          currency,
+          currency: item.price?.currency || '£',
           storeName: item.source || item.domain || 'Unknown',
-          productUrl: unwrapMerchantUrl(item.link || item.url || ''),
+          productUrl: item.link || item.url || '',
           imageUrl: item.thumbnail || null,
         };
       })
-      // A Lens link without a price cannot seed reliable tracking. Preserve
-      // the actual currency rather than silently treating everything as GBP.
-      .filter(r => r.title && r.productUrl && Number.isFinite(r.price) && r.price > 0)
-      .slice(0, 10);
+      .filter(r => r.title && r.productUrl); // Only items with title and URL
 
     if (results.length > 0) {
       for (const r of results.slice(0, 3)) {
@@ -2376,7 +2368,7 @@ export async function searchShoppingSerpAPI(searchQuery) {
         return {
           title: (item.title || '').substring(0, 200),
           price,
-          currency: '£',
+          currency: item.currency || String(item.price || '').match(/[£€$]/)?.[0] || '£',
           storeName: item.source || 'Unknown',
           // `product_link` opens Google's comparison page. Prefer the
           // merchant-specific offer link so saved items land on the seller
@@ -2509,7 +2501,7 @@ export async function resolveMerchantOffers(results) {
  * Product-title similarity is evaluated before price so a cheap accessory or
  * loosely related product cannot beat the correct item.
  */
-export async function findCheapestMatchingOffer(productName) {
+export async function findCheapestMatchingOffer(productName, wantedCurrency = null) {
   const search = await searchShoppingSerpAPI(productName);
   if (!search.success || !search.results?.length) return null;
 
@@ -2526,9 +2518,13 @@ export async function findCheapestMatchingOffer(productName) {
     const matchCount = wanted.filter((word) => offered.has(word)).length;
     return { ...result, matchCount };
   });
-  const bestMatchCount = Math.max(...scored.map((result) => result.matchCount));
+  const sameCurrency = scored.filter(
+    (result) => !wantedCurrency || currencyCode(result.currency) === wantedCurrency
+  );
+  if (!sameCurrency.length) return null;
+  const bestMatchCount = Math.max(...sameCurrency.map((result) => result.matchCount));
   const minimumMatch = Math.max(2, Math.ceil(wanted.length * 0.6));
-  const relevant = scored
+  const relevant = sameCurrency
     .filter((result) => result.matchCount >= minimumMatch && result.matchCount >= bestMatchCount - 1)
     .sort((a, b) => b.matchCount - a.matchCount || Number(a.price) - Number(b.price));
 
@@ -2536,6 +2532,63 @@ export async function findCheapestMatchingOffer(productName) {
   const [resolved] = await resolveMerchantOffers([relevant[0]]);
   const { matchCount, serpapiProductApi, ...offer } = resolved;
   return offer.productUrl ? offer : null;
+}
+
+/**
+ * A shopping result is only safe to persist after the merchant page confirms
+ * the same GBP price. Search snippets can be stale, show an accessory/variant,
+ * or resolve to a seller whose cheapest offer is for a different product.
+ */
+export function pricesAgree(advertisedPrice, merchantPrice) {
+  const advertised = Number(advertisedPrice);
+  const merchant = Number(merchantPrice);
+  if (!Number.isFinite(advertised) || !Number.isFinite(merchant) || advertised <= 0 || merchant <= 0) {
+    return false;
+  }
+
+  // Permit harmless rounding and small search-index lag, but never a
+  // materially different product/variant price.
+  return Math.abs(advertised - merchant) <= Math.max(1, advertised * 0.02);
+}
+
+export async function verifyShoppingOffer(offer) {
+  if (!offer?.productUrl || !offer?.price || !offer.currency) return null;
+
+  const result = await scrapeProduct(offer.productUrl);
+  if (
+    !result.success
+    || !result.price
+    || result.priceConfidence !== 'high'
+    || !result.currency
+    || currencyCode(offer.currency) !== result.currency
+    || !pricesAgree(offer.price, result.price)
+  ) {
+    console.log(
+      `   ⚠️ Shopping offer not confirmed by merchant page: ` +
+      `${offer.storeName || 'Unknown'} £${offer.price} ` +
+      `(page: ${result.price ? `${result.currency || '?'} ${result.price}` : 'unavailable'})`
+    );
+    return null;
+  }
+
+  return {
+    ...offer,
+    price: result.price,
+    productUrl: result.url || offer.productUrl,
+    storeName: result.storeName || offer.storeName,
+    currency: currencySymbol(result.currency),
+    currencyCode: result.currency,
+  };
+}
+
+export function currencyCode(value) {
+  const normalized = String(value || '').trim().toUpperCase();
+  return ({ '£': 'GBP', '$': 'USD', '€': 'EUR', KR: 'SEK' })[normalized] || normalized;
+}
+
+export function currencySymbol(value) {
+  const code = currencyCode(value);
+  return ({ GBP: '£', USD: '$', EUR: '€', SEK: 'kr' })[code] || code;
 }
 
 /**

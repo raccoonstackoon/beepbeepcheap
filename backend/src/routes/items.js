@@ -1,11 +1,12 @@
 import express from 'express';
 import multer from 'multer';
 import path from 'path';
-import sharp from 'sharp';
 import { fileURLToPath } from 'url';
 import * as queries from '../database/queries.js';
 import { requireUserId } from '../middleware/userId.js';
-import { scrapeProduct, scrapePrice, searchShoppingSerpAPI, searchImageViaGoogleLens, resolveMerchantOffers, searchCostco, getStoreName, normalizeProductUrl } from '../services/scraper.js';
+import { scrapeProduct, scrapePrice, searchShoppingSerpAPI, resolveMerchantOffers, searchCostco, getStoreName, normalizeProductUrl, currencyCode } from '../services/scraper.js';
+import { processImage } from '../services/imageProcessor.js';
+import { checkTrackedItem } from '../services/scheduler.js';
 
 const router = express.Router();
 
@@ -91,57 +92,13 @@ function normalizeItemUrl(raw) {
   }
 }
 
+// Persist an automatically scraped number only when both the product-price
+// source and its ISO currency code are authoritative.
 function hasTrustedPrice(scraped) {
   return scraped?.price != null
     && Number.isFinite(Number(scraped.price))
     && scraped.priceConfidence === 'high'
     && /^[A-Z]{3}$/.test(String(scraped.currency || ''));
-}
-
-const normalizeCurrency = (value) => ({ '£': 'GBP', '€': 'EUR', '$': 'USD', kr: 'SEK' }[value] || value || null);
-
-function trustedStoredOfferPrice(item) {
-  try {
-    const sources = typeof item?.tracked_sources === 'string'
-      ? JSON.parse(item.tracked_sources)
-      : item?.tracked_sources;
-    if (!Array.isArray(sources)) return null;
-    const prices = sources
-      .filter((source) => !item.currency || normalizeCurrency(source.currency) === normalizeCurrency(item.currency))
-      .map((source) => Number(source.price))
-      .filter((price) => Number.isFinite(price) && price > 0);
-    return prices.length ? Math.min(...prices) : null;
-  } catch {
-    return null;
-  }
-}
-
-async function createFocusCrop(imagePath, filename, focusArea) {
-  if (!focusArea) return { imagePath, filename };
-
-  const source = await sharp(imagePath).rotate().toBuffer({ resolveWithObject: true });
-  const imageWidth = source.info.width;
-  const imageHeight = source.info.height;
-  const clamp = (value, min, max) => Math.min(max, Math.max(min, Number(value)));
-  const x = clamp(focusArea.x, 0, 100);
-  const y = clamp(focusArea.y, 0, 100);
-  const widthPercent = clamp(focusArea.width, 0.1, 100 - x);
-  const heightPercent = clamp(focusArea.height, 0.1, 100 - y);
-  const left = Math.min(imageWidth - 1, Math.floor((x / 100) * imageWidth));
-  const top = Math.min(imageHeight - 1, Math.floor((y / 100) * imageHeight));
-  const width = Math.max(1, Math.min(imageWidth - left, Math.round((widthPercent / 100) * imageWidth)));
-  const height = Math.max(1, Math.min(imageHeight - top, Math.round((heightPercent / 100) * imageHeight)));
-  const parsedName = path.parse(filename);
-  const croppedFilename = `${parsedName.name}-focus.jpg`;
-  const croppedPath = path.join(uploadsDir, croppedFilename);
-
-  await sharp(source.data)
-    .extract({ left, top, width, height })
-    .jpeg({ quality: 92 })
-    .toFile(croppedPath);
-
-  console.log(`✂️ Cropped Lens image: ${left},${top} ${width}x${height}`);
-  return { imagePath: croppedPath, filename: croppedFilename };
 }
 
 // POST /api/items/url-preview — scrape only; lets the UI confirm/edit before save
@@ -171,8 +128,12 @@ router.post('/url-preview', async (req, res) => {
     if (!scraped.imageUrl) {
       warnings.push('no_image');
     }
-    if (scraped.price != null && !hasTrustedPrice(scraped)) warnings.push('check_price');
-    if (scraped.price != null && !scraped.currency) warnings.push('unknown_currency');
+    if (scraped.price != null && scraped.priceConfidence !== 'high') {
+      warnings.push('check_price');
+    }
+    if (scraped.price != null && !scraped.currency) {
+      warnings.push('unknown_currency');
+    }
 
     res.json({
       name: scraped.name,
@@ -229,15 +190,29 @@ router.post('/url', async (req, res) => {
   }
 });
 
-// POST /api/items/image - Crop to the user's selection and search Google Lens.
+// POST /api/items/image - Add item by product photo
+// NEW FLOW:
+// 1. Analyze image to detect brand/logo
+// 2. If no brand detected, return needsShopName=true so frontend asks user
+// 3. Once we have a brand, search the brand's official website for visually similar products
+// 4. Return the matching product URL from the brand's official site
+//
+// Params:
+// - identifyOnly=true: Just identify the product and check for brand (step 1-2)
+// - shopName: User-provided brand/shop name (for step 3)
 router.post('/image', upload.single('image'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'Image is required' });
     }
     
+    const imagePath = req.file.path;
+    // Create full URL for the uploaded image (not just relative path)
     const host = req.get('host');
-    const protocol = String(req.get('x-forwarded-proto') || req.protocol).split(',')[0].trim();
+    const protocol = req.protocol;
+    const imageUrl = `${protocol}://${host}/uploads/${req.file.filename}`;
+    const identifyOnly = req.body.identifyOnly === 'true';
+    const userProvidedShop = req.body.shopName?.trim() || null;
     
     // Parse focus area if provided (from spotlight annotation)
     let focusArea = null;
@@ -250,28 +225,122 @@ router.post('/image', upload.single('image'), async (req, res) => {
       }
     }
     
-    const lensImage = await createFocusCrop(req.file.path, req.file.filename, focusArea);
-    const lensImageUrl = `${protocol}://${host}/uploads/${encodeURIComponent(lensImage.filename)}`;
-    console.log(`📸 Sending image directly to Google Lens: ${lensImageUrl}`);
-    const lensResults = await searchImageViaGoogleLens(lensImageUrl);
-
-    if (lensResults.error === 'SERPAPI_KEY not configured') {
-      return res.status(503).json({ error: 'Google Lens search is not configured' });
+    console.log(`📸 Processing product image: ${imagePath}`);
+    if (identifyOnly) console.log(`   Mode: Identify only`);
+    if (userProvidedShop) console.log(`   User-provided brand: ${userProvidedShop}`);
+    
+    // ═══════════════════════════════════════════════════════════════════════
+    // STEP 1: Analyze image with AI to detect brand and identify product
+    // ═══════════════════════════════════════════════════════════════════════
+    const result = await processImage(imagePath, 'product', focusArea);
+    
+    if (!result.success) {
+      return res.status(400).json({ 
+        error: 'Failed to process image',
+        details: result.error 
+      });
     }
-    if (lensResults.error) {
-      return res.status(502).json({ error: 'Google Lens search failed', details: lensResults.error });
+    
+    // Check if we detected a brand
+    const detectedBrand = result.brand && 
+                          result.brand.toLowerCase() !== 'unknown' && 
+                          result.brand.toLowerCase() !== 'null' &&
+                          result.brandConfidence !== 'none'
+                          ? result.brand : null;
+    
+    console.log(`🏷️ AI Analysis Results:`);
+    console.log(`   Product: ${result.itemName || 'Unknown'}`);
+    console.log(`   Brand: ${detectedBrand || 'Not detected'}`);
+    console.log(`   Confidence: ${result.brandConfidence || 'N/A'}`);
+    console.log(`   Source: ${result.brandSource || 'N/A'}`);
+    
+    // The brand to use (user-provided takes precedence)
+    const brandName = userProvidedShop || detectedBrand;
+    const hasBrand = !!brandName;
+    
+    // ═══════════════════════════════════════════════════════════════════════
+    // STEP 2: If identifyOnly mode, return identification results
+    // Frontend will check needsShopName to decide if user input is needed
+    // ═══════════════════════════════════════════════════════════════════════
+    if (identifyOnly) {
+      return res.json({
+        extracted: { 
+          ...result, 
+          brand: detectedBrand,
+          brandConfidence: result.brandConfidence,
+          brandSource: result.brandSource
+        },
+        localImageUrl: imageUrl,
+        hasBrand: hasBrand,
+        needsShopName: !hasBrand // Tell frontend to ask for brand name
+      });
     }
+    
+    // ═══════════════════════════════════════════════════════════════════════
+    // STEP 3: SEARCH DUCKDUCKGO SHOPPING for cheapest prices
+    // Returns TOP 3 cheapest results for user to choose from
+    // ═══════════════════════════════════════════════════════════════════════
+    const productName = result.itemName || result.description || '';
+    
+    // Build search query: brand + product name (avoid duplicating brand if already in product name)
+    let searchQuery = productName;
+    if (brandName) {
+      const brandLower = brandName.toLowerCase();
+      const productLower = productName.toLowerCase();
+      // Only add brand if not already in product name
+      if (!productLower.includes(brandLower)) {
+        searchQuery = `${brandName} ${productName}`.trim();
+      }
+    }
+    
+    console.log(`🛒 Searching shopping for: "${searchQuery}"`);
+    
+    const shoppingResults = await searchShoppingSerpAPI(searchQuery);
+    
+    console.log(`📊 Found ${shoppingResults.results?.length || 0} shopping results`);
+    
+    // Filter results to ONLY show items from the specified store (if brand provided)
+    let filteredResults = shoppingResults.results || [];
+    
+    if (brandName) {
+      const brandLower = brandName.toLowerCase();
+      const beforeCount = filteredResults.length;
+      
+      filteredResults = filteredResults.filter(r => {
+        const storeLower = (r.storeName || '').toLowerCase();
+        const titleLower = (r.title || '').toLowerCase();
+        return storeLower.includes(brandLower) || titleLower.includes(brandLower);
+      });
+      
+      console.log(`🏪 Filtered to "${brandName}" only: ${filteredResults.length} of ${beforeCount} results`);
+    }
+    
+    // Claude/Google can return the same product from several merchants in an
+    // arbitrary order. Once the brand/product filter has established
+    // relevance, put the cheapest valid offer first.
+    filteredResults.sort((a, b) => {
+      const aPrice = Number(a.price) || Number.POSITIVE_INFINITY;
+      const bPrice = Number(b.price) || Number.POSITIVE_INFINITY;
+      return aPrice - bPrice;
+    });
 
-    const allResults = lensResults.results || [];
-    const topResults = allResults.slice(0, 3);
-    return res.json({
-      extracted: topResults[0] ? { itemName: topResults[0].title } : null,
-      localImageUrl: lensImageUrl,
+    const topResults = await resolveMerchantOffers(filteredResults.slice(0, 3));
+    topResults.sort((a, b) => (Number(a.price) || Number.POSITIVE_INFINITY) - (Number(b.price) || Number.POSITIVE_INFINITY));
+    
+    for (const r of topResults) {
+      console.log(`   💰 ${r.currency || '£'}${r.price || 'N/A'} - ${r.title?.substring(0, 50)}... (${r.storeName})`);
+    }
+    
+    res.json({
+      extracted: { 
+        ...result, 
+        brand: brandName || detectedBrand 
+      },
+      localImageUrl: imageUrl,
       shoppingOptions: topResults,
-      totalResultsFound: allResults.length,
-      searchMethod: 'google_lens',
-      skipConfirmation: true,
-      noMatches: topResults.length === 0,
+      searchQuery: searchQuery,
+      totalResultsFound: shoppingResults.results?.length || 0,
+      searchMethod: 'serpapi',
     });
     
   } catch (error) {
@@ -391,7 +460,7 @@ router.post('/search', async (req, res) => {
 // POST /api/items/manual - Add item manually (after image processing or manual entry)
 router.post('/manual', (req, res) => {
   try {
-    const { name, url, image_url, current_price, currency, store_name, tracked_sources } = req.body;
+    const { name, url, image_url, current_price, store_name, tracked_sources, currency } = req.body;
     
     console.log(`📥 Manual item request received:`);
     console.log(`   - Name: ${name}`);
@@ -404,21 +473,9 @@ router.post('/manual', (req, res) => {
       return res.status(400).json({ error: 'Item name is required' });
     }
 
-    const sanitizedSources = Array.isArray(tracked_sources)
-      ? tracked_sources.filter((source) => {
-          const price = Number(source?.price);
-          return source?.url && Number.isFinite(price) && price > 0;
-        })
-      : null;
-    const sourcePrices = (sanitizedSources || []).map((source) => Number(source.price));
-    const effectiveCurrency = normalizeCurrency(currency || sanitizedSources?.[0]?.currency) || 'GBP';
-    const effectivePrice = current_price != null && current_price !== ''
-      ? Number(current_price)
-      : sourcePrices.length ? Math.min(...sourcePrices) : null;
-
     // Validate price is a reasonable number
-    if (effectivePrice != null) {
-      const priceNum = Number(effectivePrice);
+    if (current_price != null) {
+      const priceNum = parseFloat(current_price);
       if (isNaN(priceNum) || priceNum < 0 || priceNum > 1000000) {
         return res.status(400).json({ error: 'Invalid price value' });
       }
@@ -454,13 +511,13 @@ router.post('/manual', (req, res) => {
       url: url || null,
       image_url: finalImageUrl,
       store_name: store_name || null,
-      current_price: effectivePrice,
-      original_price: effectivePrice,
-      currency: effectiveCurrency,
-      tracked_sources: sanitizedSources
+      current_price: current_price ? parseFloat(current_price) : null,
+      original_price: current_price ? parseFloat(current_price) : null,
+      currency: currency || 'GBP',
+      tracked_sources: tracked_sources || null
     });
     
-    console.log(`📌 Added item manually: "${name}" at ${store_name || 'Unknown'} for £${effectivePrice || 'N/A'}`);
+    console.log(`📌 Added item manually: "${name}" at ${store_name || 'Unknown'} for £${current_price || 'N/A'}`);
     console.log(`   - Saved with image_url: ${item.image_url || 'NONE'}`);
     
     res.json(item);
@@ -502,130 +559,12 @@ router.post('/:id/refresh', async (req, res) => {
       return res.status(400).json({ error: 'Item has no URL to check' });
     }
     
-    console.log(`Refreshing price for: ${item.name}`);
-    
-    // Check if URL is a DuckDuckGo tracking URL - if so, try to extract real URL
-    let urlToScrape = item.url;
-    let fixedUrl = null;
-    let extractedStoreName = null;
-    
-    if (item.url.includes('duckduckgo.com') || item.url.includes('links.duckduckgo')) {
-      console.log(`🔗 Detected DuckDuckGo tracking URL, extracting real URL...`);
-      
-      // Method 1: Extract from ad_domain parameter (easiest)
-      const adDomainMatch = item.url.match(/ad_domain=([^&]+)/);
-      if (adDomainMatch) {
-        const domain = decodeURIComponent(adDomainMatch[1]);
-        extractedStoreName = getStoreName('https://' + domain);
-        console.log(`   - Found ad_domain: ${domain} → Store: ${extractedStoreName}`);
-      }
-      
-      // Method 2: Extract actual URL from spld JSON (contains base64 encoded URL in "u" field)
-      const spldMatch = item.url.match(/spld=([^&]+)/);
-      if (spldMatch) {
-        try {
-          const spldJson = JSON.parse(decodeURIComponent(spldMatch[1]));
-          if (spldJson.u) {
-            // The "u" field is base64 encoded, then URL encoded
-            const base64Url = spldJson.u;
-            fixedUrl = decodeURIComponent(Buffer.from(base64Url, 'base64').toString('utf-8'));
-            urlToScrape = fixedUrl;
-            console.log(`   - Extracted real URL: ${fixedUrl}`);
-          }
-        } catch (e) {
-          console.log(`   - Failed to decode spld: ${e.message}`);
-        }
-      }
-      
-      // Method 3: Fallback to uddg parameter
-      if (!fixedUrl) {
-        const uddgMatch = item.url.match(/uddg=([^&]+)/);
-        if (uddgMatch) {
-          try {
-            fixedUrl = decodeURIComponent(uddgMatch[1]);
-            urlToScrape = fixedUrl;
-            console.log(`   - Extracted from uddg: ${fixedUrl}`);
-          } catch (e) {
-            console.log(`   - Failed to decode uddg`);
-          }
-        }
-      }
-    }
-    
-    // If image or store name is missing/bad, do a full scrape
-    // Otherwise just get the price (faster)
-    let newPrice = null;
-    let newImageUrl = null;
-    let newStoreName = null;
-    let newCurrency = item.currency || 'GBP';
-    
-    // Check if store name is a bad/tracking domain that needs fixing
-    const badStoreNames = ['links', 'duckduckgo', 'redbrain', 'unknown', 'shop', 'uk'];
-    const storeNameIsBad = item.store_name && badStoreNames.includes(item.store_name.toLowerCase());
-    
-    // Always do a full scrape when user clicks refresh - they want fresh data!
-    const needsFullScrape = true;
-    
-    if (needsFullScrape) {
-      console.log(`🔄 Item ${id} doing full scrape...`);
-      console.log(`   - Missing image: ${!item.image_url}`);
-      console.log(`   - Missing store: ${!item.store_name}`);
-      console.log(`   - Bad store name: ${storeNameIsBad ? item.store_name : 'NO'}`);
-      console.log(`   - URL needs fixing: ${!!fixedUrl}`);
-      const scraped = await scrapeProduct(urlToScrape);
-      newPrice = hasTrustedPrice(scraped)
-        ? scraped.price
-        : (item.current_price ?? trustedStoredOfferPrice(item));
-      if (!hasTrustedPrice(scraped) && newPrice != null) {
-        console.log(`   - Retailer scrape unavailable; preserving verified shopping price £${newPrice}`);
-      }
-      newImageUrl = scraped.imageUrl;
-      newStoreName = scraped.storeName;
-      if (hasTrustedPrice(scraped)) newCurrency = scraped.currency;
-      console.log(`   - Found image: ${newImageUrl ? 'YES' : 'NO'}`);
-      console.log(`   - Image URL: ${newImageUrl || 'NONE'}`);
-      console.log(`   - Found store: ${newStoreName || 'NO'}`);
-    } else {
-      newPrice = await scrapePrice(urlToScrape);
-    }
-    
-    if (newPrice === null) {
+    console.log(`Refreshing with scheduled-check rules: ${item.name}`);
+    const result = await checkTrackedItem(item);
+    if (!result.checked) {
       return res.status(400).json({ error: 'Could not fetch current price' });
     }
-    
-    // Update price
-    let updatedItem = queries.updateItemPrice(id, newPrice, { currency: newCurrency });
-    
-    // Update image, store name, and/or URL if needed
-    const updates = {};
-    // Always update image if we got a fresh one (user clicked refresh for a reason!)
-    if (newImageUrl) {
-      updates.image_url = newImageUrl;
-      console.log(`   ✅ Updating image URL`);
-    }
-    
-    // Use extracted store name from ad_domain OR scraped store name
-    // Override bad store names like "Links", "Duckduckgo", "Redbrain" etc.
-    if (extractedStoreName) {
-      // Always trust the ad_domain extracted store name
-      updates.store_name = extractedStoreName;
-      console.log(`   ✅ Using ad_domain store name: ${extractedStoreName}`);
-    } else if (newStoreName && (storeNameIsBad || !item.store_name)) {
-      // Use scraped store name if current one is bad or missing
-      updates.store_name = newStoreName;
-      console.log(`   ✅ Using scraped store name: ${newStoreName}`);
-    }
-    
-    if (fixedUrl) {
-      updates.url = fixedUrl;
-    }
-    
-    if (Object.keys(updates).length > 0) {
-      updatedItem = queries.updateItem(id, updates, req.userId);
-      console.log(`📝 Updated item ${id}:`, updates);
-    }
-    
-    res.json(updatedItem);
+    res.json(result.item);
   } catch (error) {
     console.error('Error refreshing price:', error);
     res.status(500).json({ error: 'Failed to refresh price' });
@@ -809,6 +748,8 @@ router.get('/:id/alternatives', async (req, res) => {
         
         // Must have valid price
         if (!r.price || r.price <= 0) return false;
+        // Price comparisons only make sense within the tracked currency.
+        if (currencyCode(r.currency || 'GBP') !== (item.currency || 'GBP')) return false;
         
         // ALL identifying words must appear in the alternative title
         // e.g., for "Tefal AeroSteam...", both "tefal" AND "aerosteam" must appear
@@ -876,33 +817,15 @@ router.get('/:id/alternatives', async (req, res) => {
       .sort((a, b) => a.price - b.price)
       // Take top 3
       .slice(0, 3);
-
-    // Google Shopping can return an intermediate product page instead of the
-    // merchant URL. Resolve the visible results to direct seller links, then
-    // discard any result that still cannot be opened safely.
-    const resolvedAlternatives = (await resolveMerchantOffers(alternatives))
-      .map((alt) => {
-        try {
-          const productUrl = new URL(String(alt.productUrl || ''));
-          if (!['http:', 'https:'].includes(productUrl.protocol)) return null;
-          return { ...alt, productUrl: productUrl.href };
-        } catch {
-          return null;
-        }
-      })
-      .filter(Boolean)
-      .sort((a, b) => Number(a.price) - Number(b.price));
     
-    console.log(`✅ Found ${resolvedAlternatives.length} matching alternatives (filtered from ${allResults.length} results: ${shoppingResults.results?.length || 0} SerpAPI + ${costcoResults.results?.length || 0} Costco)`);
+    console.log(`✅ Found ${alternatives.length} matching alternatives (filtered from ${allResults.length} results: ${shoppingResults.results?.length || 0} SerpAPI + ${costcoResults.results?.length || 0} Costco)`);
     
     // Check if user has the best price (cheapest of all alternatives)
-    const cheapestAltPrice = resolvedAlternatives.length > 0
-      ? Math.min(...resolvedAlternatives.map((alt) => alt.price))
-      : Infinity;
+    const cheapestAltPrice = alternatives.length > 0 ? alternatives[0].price : Infinity;
     const hasBestPrice = currentPrice > 0 && currentPrice <= cheapestAltPrice;
     
     // Map alternatives with savings/extra cost info
-    const alternativesWithSavings = resolvedAlternatives.map(alt => {
+    const alternativesWithSavings = alternatives.map(alt => {
       const isCheaper = currentPrice > 0 && alt.price < currentPrice;
       const priceDiff = Math.abs(currentPrice - alt.price);
       return {

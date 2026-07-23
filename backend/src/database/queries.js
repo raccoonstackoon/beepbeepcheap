@@ -52,7 +52,7 @@ export function createItem({
 
   const result = db
     .prepare(`
-    INSERT INTO items (user_id, name, url, image_url, store_name, current_price, original_price, lowest_price, last_checked, tracked_sources, currency)
+    INSERT INTO items (user_id, name, url, image_url, store_name, current_price, original_price, lowest_price, currency, last_checked, tracked_sources)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `)
     .run(
@@ -64,9 +64,9 @@ export function createItem({
       current_price,
       original_price,
       lowest_price,
+      currency || 'GBP',
       last_checked,
-      sourcesJson,
-      currency || 'GBP'
+      sourcesJson
     );
 
   if (current_price) {
@@ -76,29 +76,20 @@ export function createItem({
   return getItemById(result.lastInsertRowid);
 }
 
-export function updateItemPrice(id, newPrice, offer = null) {
+export function updateItemPrice(id, newPrice, offer = null, currency = null) {
   const db = getDatabase();
   const item = getItemById(id);
 
   if (!item) return null;
 
-  const candidatePrice = Number(newPrice);
-  if (!Number.isFinite(candidatePrice) || candidatePrice <= 0) {
-    console.warn(`Refusing to replace item ${id} price with invalid value: ${newPrice}`);
-    return item;
-  }
-
-  const normalizeCurrency = (value) => ({ '£': 'GBP', '€': 'EUR', '$': 'USD', kr: 'SEK' }[value] || value || null);
-  const itemCurrency = normalizeCurrency(item.currency) || 'GBP';
-  const offerCurrency = normalizeCurrency(offer?.currency);
-  if (offerCurrency && offerCurrency !== itemCurrency) {
-    console.warn(`Refusing to compare ${offerCurrency} offer with ${itemCurrency} item ${id}`);
-    return item;
-  }
-
   // Ensure prices are numbers for accurate comparison
   const currentPrice = Number(item.current_price);
-  const newPriceNum = candidatePrice;
+  const newPriceNum = Number(newPrice);
+  const nextCurrency = String(currency || offer?.currencyCode || item.currency || 'GBP').toUpperCase();
+  if (item.currency && String(item.currency).toUpperCase() !== nextCurrency) {
+    console.warn(`Refusing to compare ${item.currency} and ${nextCurrency} for item ${id}`);
+    return item;
+  }
   const lowestPrice = Number(item.lowest_price || newPriceNum);
 
   const lowest_price = Math.min(lowestPrice, newPriceNum);
@@ -114,8 +105,7 @@ export function updateItemPrice(id, newPrice, offer = null) {
     SET current_price = ?, lowest_price = ?, last_checked = ?,
         url = COALESCE(?, url),
         store_name = COALESCE(?, store_name),
-        tracked_sources = ?,
-        currency = COALESCE(?, currency)
+        tracked_sources = ?, currency = ?
     WHERE id = ?
   `
   ).run(
@@ -125,7 +115,7 @@ export function updateItemPrice(id, newPrice, offer = null) {
     offer?.productUrl || null,
     offer?.storeName || null,
     sourcesJson,
-    offerCurrency,
+    nextCurrency,
     id
   );
 
@@ -199,7 +189,7 @@ export function getAllAlerts(userId) {
   return db
     .prepare(
       `
-    SELECT a.*, i.name as item_name, i.image_url
+    SELECT a.*, i.name as item_name, i.image_url, i.currency
     FROM alerts a
     JOIN items i ON a.item_id = i.id
     WHERE i.user_id = ?
@@ -214,7 +204,7 @@ export function getUnreadAlerts(userId) {
   return db
     .prepare(
       `
-    SELECT a.*, i.name as item_name, i.image_url
+    SELECT a.*, i.name as item_name, i.image_url, i.currency
     FROM alerts a
     JOIN items i ON a.item_id = i.id
     WHERE a.is_read = 0 AND i.user_id = ?
@@ -242,6 +232,7 @@ export function createAlert(itemId, oldPrice, newPrice) {
     item_id: itemId,
     item_name: item?.name,
     image_url: item?.image_url,
+    currency: item?.currency || 'GBP',
     old_price: oldPrice,
     new_price: newPrice,
     created_at: new Date().toISOString(),
@@ -254,7 +245,7 @@ export function createAlert(itemId, oldPrice, newPrice) {
   const drop = ((oldPrice - newPrice) / oldPrice * 100).toFixed(0);
   sendPushForUser(userId, {
     title: `Price dropped ${drop}%!`,
-    body: `${item?.name || 'An item'}: £${oldPrice.toFixed(2)} → £${newPrice.toFixed(2)}`,
+    body: `${item?.name || 'An item'}: ${item?.currency || 'GBP'} ${oldPrice.toFixed(2)} → ${newPrice.toFixed(2)}`,
     url: `/item/${itemId}`,
   }).catch((err) => console.error('Push notification error:', err));
 }
