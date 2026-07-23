@@ -25,17 +25,6 @@ export function getOrCreateUserId() {
   }
 }
 
-/** Start a fresh anonymous identity after signing out of an account. */
-export function resetUserId() {
-  const id = crypto.randomUUID().toLowerCase();
-  try {
-    localStorage.setItem(STORAGE_KEY, id);
-  } catch {
-    if (typeof window !== 'undefined') window.__beepbeepSessionUserId = id;
-  }
-  return id;
-}
-
 function isUuidV4(s) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
     String(s).trim()

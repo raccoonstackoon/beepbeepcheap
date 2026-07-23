@@ -23,6 +23,7 @@ import raccoonImage from '../assets/raccoon.png';
 import './Dashboard.css';
 import { apiFetch } from '../apiConfig.js';
 import { enablePushNotifications, getPushNotificationStatus } from '../pushNotifications.js';
+import { formatMoney } from '../money.js';
 
 export default function Dashboard({ items, alerts, onRefresh, apiBase }) {
   const [showAddModal, setShowAddModal] = useState(false);
@@ -70,12 +71,25 @@ export default function Dashboard({ items, alerts, onRefresh, apiBase }) {
   // Calculate stats (moved up so they can be used in effects)
   const totalItems = items.length;
   const itemsWithDrops = items.filter(i => i.current_price && i.original_price && i.current_price < i.original_price).length;
+  // Reward thresholds remain GBP-denominated; never add unlike currencies.
   const totalSavings = items.reduce((sum, item) => {
     if (item.current_price && item.original_price && item.current_price < item.original_price) {
-      return sum + (item.original_price - item.current_price);
+      return (item.currency || 'GBP') === 'GBP'
+        ? sum + (item.original_price - item.current_price)
+        : sum;
     }
     return sum;
   }, 0);
+  const savingsByCurrency = items.reduce((totals, item) => {
+    if (item.current_price && item.original_price && item.current_price < item.original_price) {
+      const currency = item.currency || 'GBP';
+      totals[currency] = (totals[currency] || 0) + item.original_price - item.current_price;
+    }
+    return totals;
+  }, {});
+  const savingsDisplay = Object.entries(savingsByCurrency)
+    .map(([currency, value]) => formatMoney(value, currency))
+    .join(' · ') || formatMoney(0, 'GBP');
 
   // Filter items based on active stat filter and search query
   const baseItems = activeFilter === 'drops'
@@ -419,7 +433,7 @@ export default function Dashboard({ items, alerts, onRefresh, apiBase }) {
             onClick={() => setActiveFilter(null)}
           >
             <div className="stat-card-content">
-              <div className="stat-card-value">£{totalSavings.toFixed(2)}</div>
+              <div className="stat-card-value">{savingsDisplay}</div>
               <div className="stat-card-label">SAVINGS</div>
             </div>
           </div>

@@ -1,28 +1,55 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { 
-  ArrowLeft, 
-  Target, 
-  Flame, 
+import {
+  ArrowLeft,
+  Target,
+  Flame,
   Calendar,
   Trophy,
   Sparkles,
   Check,
   Lock,
-  LogIn,
   LogOut
 } from 'lucide-react';
 import { Raccoon } from '../components/PixelMascot';
 import raccoonImage from '../assets/raccoon.png';
 import './Rewards.css';
 import { apiFetch } from '../apiConfig.js';
-import { clearAuthToken, isAuthenticated } from '../auth.js';
-import { resetUserId } from '../userId.js';
+import { isAuthenticated, clearAuthToken } from '../auth.js';
 
 function Rewards({ apiBase }) {
   const navigate = useNavigate();
   const [rewards, setRewards] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!isAuthenticated() && window.google) {
+      window.google.accounts.id.initialize({
+        client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
+        callback: async (response) => {
+          try {
+            const guestUserId = localStorage.getItem('beepbeep_user_id');
+            const result = await fetch(`${apiBase}/auth/oauth/google`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ token: response.credential, guestUserId }),
+            });
+            if (!result.ok) throw new Error('Login failed');
+            const data = await result.json();
+            localStorage.setItem('beepbeep_jwt', data.token);
+            localStorage.setItem('beepbeep_user_id', data.user.id);
+            navigate('/rewards');
+          } catch (err) {
+            console.error('Google login error:', err);
+          }
+        },
+      });
+      window.google.accounts.id.renderButton(
+        document.getElementById('rewards-google-signin-container'),
+        { theme: 'outline', size: 'large', width: 300, text: 'signin_with', shape: 'rectangular' }
+      );
+    }
+  }, [apiBase, navigate]);
 
   useEffect(() => {
     const fetchRewards = async () => {
@@ -61,10 +88,8 @@ function Rewards({ apiBase }) {
     );
   }
 
-  const signedIn = isAuthenticated();
   const handleLogout = () => {
     clearAuthToken();
-    resetUserId();
     navigate('/login');
   };
 
@@ -215,19 +240,26 @@ function Rewards({ apiBase }) {
         </ul>
       </section>
 
-      <section className="account-section">
-        {signedIn ? (
-          <button className="btn-account" onClick={handleLogout}>
+      {/* Sign In with Google (guest only) */}
+      {!isAuthenticated() && (
+        <section className="logout-section">
+          <div id="rewards-google-signin-container" className="google-signin-container"></div>
+        </section>
+      )}
+
+      {/* Logout Button */}
+      {isAuthenticated() && (
+        <section className="logout-section">
+          <button
+            className="btn-logout"
+            onClick={handleLogout}
+            aria-label="Logout"
+          >
             <LogOut size={18} />
-            <span>Sign out</span>
+            <span>Logout</span>
           </button>
-        ) : (
-          <Link className="btn-account" to="/login">
-            <LogIn size={18} />
-            <span>Sign in to sync rewards</span>
-          </Link>
-        )}
-      </section>
+        </section>
+      )}
     </div>
   );
 }

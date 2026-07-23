@@ -9,14 +9,14 @@ import {
   ReferenceLine
 } from 'recharts';
 import './PriceChart.css';
-import { formatPrice } from '../currency.js';
+import { formatMoney } from '../money.js';
 
 // Custom tooltip - defined outside component to prevent re-creation
 const CustomTooltip = ({ active, payload, currency }) => {
   if (active && payload && payload.length) {
     return (
       <div className="chart-tooltip">
-        <p className="tooltip-price">{formatPrice(payload[0].value, currency)}</p>
+        <p className="tooltip-price">{formatMoney(payload[0].value, currency)}</p>
         <p className="tooltip-date">{payload[0].payload.fullDate}</p>
       </div>
     );
@@ -73,7 +73,7 @@ export default function PriceChart({ data, currency = 'GBP' }) {
             axisLine={false}
             width={45}
             domain={[minPrice - padding, maxPrice + padding]}
-            tickFormatter={(value) => formatPrice(value, currency)}
+            tickFormatter={(value) => formatMoney(value, currency, 0)}
           />
           
           <Tooltip content={<CustomTooltip currency={currency} />} />
@@ -109,7 +109,7 @@ export default function PriceChart({ data, currency = 'GBP' }) {
       <div className="chart-legend">
         <div className="legend-item">
           <span className="legend-line lowest"></span>
-          <span>Lowest price: {formatPrice(minPrice, currency)}</span>
+          <span>Lowest price: {formatMoney(minPrice, currency)}</span>
         </div>
       </div>
     </div>

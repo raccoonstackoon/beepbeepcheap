@@ -12,6 +12,7 @@ import {
 import './AddItemModal.css';
 import { apiFetch } from '../apiConfig.js';
 import ImageAnnotator from './ImageAnnotator';
+import { currencyCode, formatMoney } from '../money.js';
 
 async function safeJson(res) {
   const text = await res.text();
@@ -29,7 +30,6 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
   
   // Ref to file input so we can trigger it programmatically
   const fileInputRef = useRef(null);
-  const cameraInputRef = useRef(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   
@@ -72,8 +72,8 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
 
   // When opened directly in photo mode, trigger file picker immediately
   useEffect(() => {
-    if (initialMode === 'product' && cameraInputRef.current) {
-      cameraInputRef.current.click();
+    if (initialMode === 'product' && fileInputRef.current) {
+      fileInputRef.current.click();
     }
   }, [initialMode]);
 
@@ -191,9 +191,9 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
   // Handle clicking "Take a Photo" - immediately open file picker
   const handlePhotoModeClick = () => {
     setMode('product');
-    // Android Chrome needs a dedicated capture input to open the camera.
-    if (cameraInputRef.current) {
-      cameraInputRef.current.click();
+    // Trigger the file input immediately
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
     }
   };
 
@@ -215,7 +215,7 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
     setShopNameInput('');
     setProductNameInput('');
     setIdentifiedProduct(null);
-    setManualData({ name: '', url: '', price: '', imageUrl: '', storeName: '', currency: 'GBP' });
+    setManualData({ name: '', url: '', price: '', imageUrl: '', storeName: '' });
     // Automatically move to annotation step
     setIsAnnotating(true);
   };
@@ -236,9 +236,6 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
     // Reset file input so the same file can be selected again
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
-    }
-    if (cameraInputRef.current) {
-      cameraInputRef.current.value = '';
     }
   };
 
@@ -271,30 +268,16 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
         throw new Error(data.error || 'Failed to process image');
       }
 
-      // Google Lens is the complete photo flow; do not caption with an AI model.
-      if (data.skipConfirmation) {
-        // Camera capture and library upload converge here and must clear any
-        // state left by an earlier attempt before showing the Lens response.
-        setMode('product');
-        setSelectedOption(null);
+      // If Google Lens found results directly, show them immediately
+      if (data.skipConfirmation && data.shoppingOptions?.length > 0) {
+        console.log('✅ Google Lens found results — showing directly');
+        setExtractedData(data.extracted || {
+          itemName: data.shoppingOptions[0]?.title || 'Product',
+          localImageUrl: data.localImageUrl
+        });
+        setShoppingOptions(data.shoppingOptions);
+        setTrackIncluded(data.shoppingOptions.map((_, i) => i === 0));
         setNeedsShopName(false);
-        if (data.shoppingOptions?.length > 0) {
-          console.log('✅ Google Lens found results — showing directly');
-          setExtractedData(data.extracted || {
-            itemName: data.shoppingOptions[0]?.title || 'Product',
-            localImageUrl: data.localImageUrl
-          });
-          setShoppingOptions(data.shoppingOptions);
-          setTrackIncluded(data.shoppingOptions.map((_, i) => i === 0));
-          setBackupResults([]);
-          setSearchResults(null);
-        } else {
-          setExtractedData({ itemName: 'Selected item', localImageUrl: data.localImageUrl });
-          setShoppingOptions([]);
-          setTrackIncluded([]);
-          setBackupResults([]);
-          setSearchResults({ found: false, error: 'Google Lens could not find a matching product.' });
-        }
       } else {
         // Text-based fallback: show shop name confirmation screen
         setIdentifiedProduct({
@@ -445,8 +428,8 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
       url: option.productUrl || '',
       price: option.price?.toString() || '',
       imageUrl: finalImageUrl,
-      storeName: option.storeName || '',
-      currency: option.currency || '£'
+      storeName: option.storeName || ''
+      ,currency: currencyCode(option.currency || 'GBP')
     });
   };
   
@@ -487,7 +470,7 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
         url: opt.productUrl || null,
         imageUrl: fixUrl(opt.imageUrl || ''),
         price: opt.price || null,
-        currency: opt.currency || '£',
+        currency: currencyCode(opt.currency || 'GBP'),
         storeName: opt.storeName || null,
       }));
 
@@ -498,8 +481,8 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
           url: main.productUrl || null,
           image_url: mainImageUrl || null,
           current_price: main.price || null,
-          currency: main.currency || '£',
           store_name: main.storeName || null,
+          currency: currencyCode(main.currency || 'GBP'),
           tracked_sources: trackedSources,
         }),
       });
@@ -567,8 +550,8 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
           url: manualData.url.trim() || null,
           image_url: manualData.imageUrl || null,
           current_price: manualData.price ? parseFloat(manualData.price) : null,
-          currency: manualData.currency,
           store_name: manualData.storeName || null,
+          currency: manualData.currency || 'GBP',
         }),
       });
       
@@ -599,7 +582,7 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
                 if (extractedData?.fromUrlPaste && selectedOption) {
                   setSelectedOption(null);
                   setExtractedData(null);
-                  setManualData({ name: '', url: '', price: '', imageUrl: '', storeName: '', currency: 'GBP' });
+                  setManualData({ name: '', url: '', price: '', imageUrl: '', storeName: '' });
                   return;
                 }
                 if (selectedOption || (searchResults && !searchResults.found)) {
@@ -640,14 +623,6 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
           ref={fileInputRef}
           type="file"
           accept="image/*"
-          onChange={handleImageSelect}
-          style={{ display: 'none' }}
-        />
-        <input
-          ref={cameraInputRef}
-          type="file"
-          accept="image/*"
-          capture="environment"
           onChange={handleImageSelect}
           style={{ display: 'none' }}
         />
@@ -706,10 +681,10 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
               <button 
                 className="upload-label" 
                 type="button"
-                onClick={handlePhotoModeClick}
+                onClick={() => { setMode('product'); fileInputRef.current?.click(); }}
               >
                 <Camera size={32} />
-                <span>Take a photo of the item to find the best price.</span>
+                <span>Upload or take a photo of the item to find best price.</span>
               </button>
             </div>
             
@@ -736,20 +711,13 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
         {mode === 'product' && !extractedData && !isAnnotating && !loading && !imageFile && !needsShopName && (
           <div className="image-mode">
             <div className="image-upload-area">
-              <button
+              <button 
                 className="upload-label" 
-                type="button"
-                onClick={() => cameraInputRef.current?.click()}
-              >
-                <Camera size={32} />
-                <span>Take a photo</span>
-              </button>
-              <button
-                className="upload-label"
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
               >
-                <span>Choose from photo library</span>
+                <Camera size={32} />
+                <span>Upload or take a photo of the item to find best price.</span>
               </button>
             </div>
             
@@ -943,7 +911,7 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
                         <span className="option-store">{option.storeName}</span>
                         {option.price && (
                           <span className="option-price">
-                            {option.currency || '£'}{option.price.toFixed(2)}
+                            {formatMoney(option.price, option.currency)}
                             {option.currency && option.currency !== '£' && (
                               <span className="currency-label">
                                 {' '}{({ '€': 'EUR', '$': 'USD', 'kr': 'SEK' })[option.currency] || ''}
@@ -982,8 +950,7 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
                     url: '',
                     price: '',
                     imageUrl: identifiedProduct?.localImageUrl || '',
-                    storeName: '',
-                    currency: 'GBP'
+                    storeName: ''
                   });
                 }}
               >
@@ -1048,7 +1015,10 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
                   <p className="form-help">Couldn’t find a product photo — paste an image link if you have one.</p>
                 )}
                 {extractedData.warnings.includes('check_price') && (
-                  <p className="form-help">We couldn’t verify this as the current GBP product price, so we left it blank. Check the page and enter the price manually.</p>
+                  <p className="form-help">This shop doesn’t expose a trustworthy product price. Check the page and enter the current price manually.</p>
+                )}
+                {extractedData.warnings.includes('unknown_currency') && (
+                  <p className="form-help">We found a number but couldn’t verify its currency, so we left the price blank.</p>
                 )}
               </div>
             )}
@@ -1100,7 +1070,7 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
               {selectedOption && !selectedOption.manual && manualData.price && (
                 <div className="selected-price-display">
                   <span className="price-label">Current price:</span>
-                  <span className="price-value">{manualData.currency === 'EUR' || manualData.currency === '€' ? '€' : manualData.currency === 'USD' || manualData.currency === '$' ? '$' : manualData.currency === 'SEK' || manualData.currency === 'kr' ? 'kr ' : '£'}{parseFloat(manualData.price).toFixed(2)}</span>
+                  <span className="price-value">{formatMoney(manualData.price, manualData.currency)}</span>
                   <span className="price-store">at {manualData.storeName}</span>
                 </div>
               )}
@@ -1116,6 +1086,21 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
                       onChange={(e) => setManualData({ ...manualData, price: e.target.value })}
                       placeholder="e.g. 29.99"
                     />
+                  </div>
+                  <div className="form-group">
+                    <label>Currency</label>
+                    <select
+                      value={manualData.currency || 'GBP'}
+                      onChange={(e) => setManualData({ ...manualData, currency: e.target.value })}
+                    >
+                      <option value="GBP">GBP (£)</option>
+                      <option value="USD">USD ($)</option>
+                      <option value="EUR">EUR (€)</option>
+                      <option value="SEK">SEK (kr)</option>
+                      <option value="CAD">CAD ($)</option>
+                      <option value="AUD">AUD ($)</option>
+                      <option value="JPY">JPY (¥)</option>
+                    </select>
                   </div>
                   <div className="form-group">
                     <label>Store (optional)</label>

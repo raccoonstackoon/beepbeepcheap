@@ -11,34 +11,6 @@
   margin: 0 auto;
 }
 
-.account-section {
-  margin-top: var(--space-xl);
-  padding: var(--space-lg) 0;
-  border-top: 2px solid var(--border-color, #e0e0e0);
-  display: flex;
-  justify-content: center;
-}
-
-.btn-account {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 24px;
-  background: var(--bg-secondary, #fafafa);
-  border: 2px solid var(--pixel-outline, #ddd);
-  border-radius: 8px;
-  color: var(--text-primary, #333);
-  font: inherit;
-  cursor: pointer;
-  text-decoration: none;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-
-.btn-account:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
-}
-
 .rewards-loading,
 .rewards-error {
   display: flex;
@@ -408,4 +380,60 @@
   .breakdown-description {
     display: none;
   }
+}
+
+
+/* Logout Section */
+.logout-section {
+  margin-top: var(--space-xl);
+  padding: var(--space-lg) 0;
+  border-top: 2px solid var(--border-color, #e0e0e0);
+  display: flex;
+  justify-content: center;
+}
+
+.btn-logout {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 24px;
+  background: var(--bg-secondary, #fafafa);
+  border: 2px solid var(--pixel-outline, #ddd);
+  border-radius: 8px;
+  color: var(--text-primary, #333);
+  font-size: 0.875rem;
+  font-weight: 500;
+  font-family: var(--font-pixel);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.btn-logout:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+  background: var(--bg-tertiary, #f5f5f5);
+}
+
+.btn-logout:active {
+  transform: translateY(0);
+}
+
+.google-signin-container {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  border: 2px solid var(--pixel-outline);
+  border-radius: 8px;
+  box-shadow: var(--shadow-pixel-sm);
+  overflow: hidden;
+  min-height: 44px;
+}
+
+.google-signin-container > div {
+  width: 100% !important;
+}
+
+.google-signin-container iframe {
+  width: 100% !important;
 }

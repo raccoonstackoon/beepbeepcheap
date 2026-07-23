@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { TrendingDown, X } from 'lucide-react';
 import './NotificationToast.css';
 import { apiFetch } from '../apiConfig.js';
+import { formatMoney } from '../money.js';
 
 export default function NotificationToast({ alert, onDismiss, apiBase }) {
   const [isVisible, setIsVisible] = useState(false);
@@ -74,10 +75,10 @@ export default function NotificationToast({ alert, onDismiss, apiBase }) {
             <strong>{alert.item_name}</strong> dropped {percentDrop}%
           </p>
           <p className="notification-price">
-            <span className="old-price">£{alert.old_price.toFixed(2)}</span>
+            <span className="old-price">{formatMoney(alert.old_price, alert.currency)}</span>
             <span className="arrow">→</span>
-            <span className="new-price">£{alert.new_price.toFixed(2)}</span>
-            <span className="savings-badge">-£{savings}</span>
+            <span className="new-price">{formatMoney(alert.new_price, alert.currency)}</span>
+            <span className="savings-badge">-{formatMoney(savings, alert.currency)}</span>
           </p>
         </div>
         
@@ -103,7 +104,6 @@ export default function NotificationToast({ alert, onDismiss, apiBase }) {
     </div>
   );
 }
-
 
 
 

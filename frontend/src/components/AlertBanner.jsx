@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { TrendingDown, Check } from 'lucide-react';
 import './AlertBanner.css';
 import { apiFetch } from '../apiConfig.js';
+import { formatMoney } from '../money.js';
 
 function formatAlertDate(dateStr) {
   if (!dateStr) return '';
@@ -48,10 +49,10 @@ export default function AlertBanner({ alert, apiBase, onDismiss }) {
           )}
         </div>
         <p className="alert-prices">
-          <span className="old-price">£{alert.old_price.toFixed(2)}</span>
+          <span className="old-price">{formatMoney(alert.old_price, alert.currency)}</span>
           <span className="arrow">→</span>
-          <span className="new-price">£{alert.new_price.toFixed(2)}</span>
-          <span className="savings">Save £{savings}</span>
+          <span className="new-price">{formatMoney(alert.new_price, alert.currency)}</span>
+          <span className="savings">Save {formatMoney(savings, alert.currency)}</span>
         </p>
       </div>
       
@@ -65,4 +66,3 @@ export default function AlertBanner({ alert, apiBase, onDismiss }) {
     </Link>
   );
 }
-

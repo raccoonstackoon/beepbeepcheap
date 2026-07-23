@@ -18,24 +18,15 @@ import {
   X
 } from 'lucide-react';
 import PriceChart from '../components/PriceChart';
-import { formatPrice } from '../currency.js';
 import hyraxImage from '../assets/hyrax.png';
 import './ItemDetail.css';
 import { apiFetch } from '../apiConfig.js';
+import { formatMoney } from '../money.js';
 
 async function safeJson(res) {
   const text = await res.text();
   if (!text) throw new Error('Server returned an empty response — please try again.');
   try { return JSON.parse(text); } catch { throw new Error('Server returned an unexpected response.'); }
-}
-
-function safeExternalUrl(value) {
-  try {
-    const parsed = new URL(String(value || ''));
-    return ['http:', 'https:'].includes(parsed.protocol) ? parsed.href : null;
-  } catch {
-    return null;
-  }
 }
 
 export default function ItemDetail({ apiBase, onRefresh }) {
@@ -172,6 +163,7 @@ export default function ItemDetail({ apiBase, onRefresh }) {
           url: alt.productUrl,
           image_url: alt.imageUrl,
           current_price: alt.price,
+          currency: alt.currency || item.currency,
           store_name: alt.storeName,
         }),
       });
@@ -211,6 +203,7 @@ export default function ItemDetail({ apiBase, onRefresh }) {
           url: alt.productUrl,
           image_url: alt.imageUrl,
           current_price: alt.price,
+          currency: alt.currency || item.currency,
           store_name: alt.storeName,
         }),
       });
@@ -257,6 +250,7 @@ export default function ItemDetail({ apiBase, onRefresh }) {
             url: alt.productUrl,
             image_url: alt.imageUrl,
             current_price: alt.price,
+            currency: alt.currency || item.currency,
             store_name: alt.storeName,
           }),
         });
@@ -366,7 +360,7 @@ export default function ItemDetail({ apiBase, onRefresh }) {
             )}
             
             <div className="price-section">
-              <span className="price-now">{formatPrice(item.current_price, item.currency)}</span>
+              <span className="price-now">{formatMoney(item.current_price, item.currency)}</span>
               {priceChange != 0 && (
                 <span className={`price-badge ${priceChange < 0 ? 'price-down' : 'price-up'}`}>
                   {priceChange < 0 ? <TrendingDown size={12} /> : <TrendingUp size={12} />}
@@ -374,10 +368,10 @@ export default function ItemDetail({ apiBase, onRefresh }) {
                 </span>
               )}
               {item.original_price && item.original_price !== item.current_price && (
-                <span className="price-original">was {formatPrice(item.original_price, item.currency)}</span>
+                <span className="price-original">was {formatMoney(item.original_price, item.currency)}</span>
               )}
               {savings && (
-                <span className="price-savings">save {formatPrice(savings, item.currency)}</span>
+                <span className="price-savings">save {formatMoney(savings, item.currency)}</span>
               )}
             </div>
             
@@ -400,14 +394,6 @@ export default function ItemDetail({ apiBase, onRefresh }) {
         {item.tracked_sources && (() => {
           let sources;
           try { sources = JSON.parse(item.tracked_sources); } catch { sources = null; }
-          if (Array.isArray(sources)) {
-            sources = sources
-              .map((source) => ({
-                ...source,
-                openUrl: safeExternalUrl(source.url || source.productUrl),
-              }))
-              .filter((source) => source.openUrl);
-          }
           if (!sources || sources.length <= 1) return null;
           
           const cheapest = Math.min(...sources.filter(s => s.price).map(s => s.price));
@@ -425,7 +411,7 @@ export default function ItemDetail({ apiBase, onRefresh }) {
                     className={`alternative-item ${source.price === cheapest ? 'is-cheaper' : 'is-more-expensive'}`}
                   >
                     <a 
-                      href={source.openUrl}
+                      href={source.url}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="alt-link"
@@ -436,7 +422,7 @@ export default function ItemDetail({ apiBase, onRefresh }) {
                         <span className="alt-title">{source.title?.substring(0, 80) || 'Product'}</span>
                       </div>
                       <div className="alt-price-section">
-                        <span className="alt-price">{formatPrice(source.price, source.currency || item.currency)}</span>
+                        <span className="alt-price">{formatMoney(source.price, source.currency || item.currency)}</span>
                         {source.price === cheapest && (
                           <span className="alt-savings">
                             <Sparkles size={12} />
@@ -445,12 +431,11 @@ export default function ItemDetail({ apiBase, onRefresh }) {
                         )}
                         {source.price > cheapest && (
                           <span className="alt-extra-cost">
-                            +{formatPrice(source.price - cheapest, source.currency || item.currency)} more
+                            +£{(source.price - cheapest).toFixed(2)} more
                           </span>
                         )}
                       </div>
                       <ExternalLink size={14} className="alt-external" />
-                      <span className="alt-open-label">Open store</span>
                     </a>
                   </div>
                 ))}
@@ -519,7 +504,7 @@ export default function ItemDetail({ apiBase, onRefresh }) {
                   <Sparkles size={18} className="best-price-icon" />
                   <div className="best-price-text">
                     <strong>You've got the best price!</strong>
-                    <span>{formatPrice(item.current_price, item.currency)} is cheaper than all alternatives</span>
+                    <span>{formatMoney(item.current_price, item.currency)} is cheaper than all alternatives</span>
                   </div>
                 </div>
               )}
@@ -544,7 +529,7 @@ export default function ItemDetail({ apiBase, onRefresh }) {
                           <span className="alt-title">{alt.title?.substring(0, 80) || 'Product'}</span>
                         </div>
                         <div className="alt-price-section">
-                          <span className="alt-price">{formatPrice(alt.price, alt.currency || item.currency)}</span>
+                          <span className="alt-price">£{alt.price?.toFixed(2)}</span>
                           {alt.isCheaper && alt.savings && (
                             <span className="alt-savings">
                               <Sparkles size={12} />
@@ -558,7 +543,6 @@ export default function ItemDetail({ apiBase, onRefresh }) {
                           )}
                         </div>
                         <ExternalLink size={14} className="alt-link-icon" />
-                        <span className="alt-open-label">Open store</span>
                       </a>
                       
                       <button
@@ -638,7 +622,7 @@ export default function ItemDetail({ apiBase, onRefresh }) {
         <div className="price-history-section card fade-in" style={{ animationDelay: '0.1s' }}>
           <h2>Price History</h2>
           {history.length > 1 ? (
-            <PriceChart data={history} currency={item.currency} />
+              <PriceChart data={history} currency={item.currency} />
           ) : (
             <p className="no-history">
               Not enough data yet. Price history will appear after more checks.
@@ -669,7 +653,7 @@ export default function ItemDetail({ apiBase, onRefresh }) {
                     return (
                       <tr key={entry.id}>
                         <td>{new Date(entry.checked_at).toLocaleString()}</td>
-                        <td className="price">{formatPrice(entry.price, item.currency)}</td>
+                        <td className="price">£{entry.price.toFixed(2)}</td>
                         <td>
                           {change !== null && change != 0 && (
                             <span className={parseFloat(change) < 0 ? 'price-down' : 'price-up'}>
@@ -703,7 +687,7 @@ export default function ItemDetail({ apiBase, onRefresh }) {
             <div className="modal-product-preview">
               <span className="preview-store">{selectedAlternative.storeName}</span>
               <span className="preview-title">{selectedAlternative.title?.substring(0, 60)}...</span>
-              <span className="preview-price">{formatPrice(selectedAlternative.price, selectedAlternative.currency || item.currency)}</span>
+              <span className="preview-price">£{selectedAlternative.price?.toFixed(2)}</span>
               {selectedAlternative.savings && (
                 <span className="preview-savings">Save £{selectedAlternative.savings}</span>
               )}

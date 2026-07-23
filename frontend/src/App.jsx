@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Dashboard from './pages/Dashboard';
 import ItemDetail from './pages/ItemDetail';
 import Rewards from './pages/Rewards';
@@ -10,6 +10,7 @@ import './App.css';
 import { getApiBase, apiFetch } from './apiConfig.js';
 
 const API_BASE = getApiBase();
+console.log('[App] Version:', new Date().toISOString(), '- Code reloaded');
 
 function App() {
   const [items, setItems] = useState([]);
@@ -19,7 +20,13 @@ function App() {
   const fetchItems = async () => {
     try {
       const res = await apiFetch(API_BASE, '/items');
-      if (!res.ok) throw new Error(`Items request failed (${res.status})`);
+      if (!res.ok) {
+        console.error('Failed to fetch items:', res.status, res.statusText);
+        const error = await res.json();
+        console.error('Error response:', error);
+        setItems([]);
+        return;
+      }
       const data = await res.json();
       setItems(Array.isArray(data) ? data : []);
     } catch (error) {
@@ -31,7 +38,13 @@ function App() {
   const fetchAlerts = async () => {
     try {
       const res = await apiFetch(API_BASE, '/alerts/unread');
-      if (!res.ok) throw new Error(`Alerts request failed (${res.status})`);
+      if (!res.ok) {
+        console.error('Failed to fetch alerts:', res.status, res.statusText);
+        const error = await res.json();
+        console.error('Error response:', error);
+        setAlerts([]);
+        return;
+      }
       const data = await res.json();
       setAlerts(Array.isArray(data) ? data : []);
     } catch (error) {
@@ -44,6 +57,7 @@ function App() {
     const init = async () => {
       await Promise.all([fetchItems(), fetchAlerts()]);
       setLoading(false);
+
     };
     init();
 
@@ -76,43 +90,43 @@ function App() {
   return (
     <BrowserRouter>
       {/* Real-time notification toasts */}
-      <NotificationContainer 
-        apiBase={API_BASE} 
+      <NotificationContainer
+        apiBase={API_BASE}
         onNewAlert={refreshData}
       />
-      
+
       {/* PWA install prompt for mobile users */}
       <InstallPrompt />
-      
+
       <Routes>
         <Route path="/login" element={<Login onLoginSuccess={refreshData} />} />
-        <Route 
-          path="/" 
+        <Route
+          path="/"
           element={
-            <Dashboard 
-              items={items} 
-              alerts={alerts} 
+            <Dashboard
+              items={items}
+              alerts={alerts}
               onRefresh={refreshData}
               apiBase={API_BASE}
             />
-          } 
+          }
         />
-        <Route 
-          path="/item/:id" 
+        <Route
+          path="/item/:id"
           element={
-            <ItemDetail 
+            <ItemDetail
               apiBase={API_BASE}
               onRefresh={refreshData}
             />
-          } 
+          }
         />
-        <Route 
-          path="/rewards" 
+        <Route
+          path="/rewards"
           element={
-            <Rewards 
+            <Rewards
               apiBase={API_BASE}
             />
-          } 
+          }
         />
       </Routes>
     </BrowserRouter>
