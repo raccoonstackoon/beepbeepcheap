@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { currencyCode, currencySymbol, pricesAgree } from '../src/services/scraper.js';
+import { currencyCode, currencySymbol, pricesAgree, productNamesMatch } from '../src/services/scraper.js';
 
 test('accepts the same merchant and shopping price', () => {
   assert.equal(pricesAgree(99.99, 99.99), true);
@@ -26,4 +26,16 @@ test('normalizes supported currency symbols and codes', () => {
   assert.equal(currencyCode('$'), 'USD');
   assert.equal(currencySymbol('GBP'), '£');
   assert.equal(currencySymbol('SEK'), 'kr');
+});
+
+test('matches the same product while rejecting another model or size', () => {
+  assert.equal(
+    productNamesMatch('Tefal AeroSteam DT9814 Clothes Steamer', 'Tefal DT9814 AeroSteam Handheld Clothes Steamer'),
+    true
+  );
+  assert.equal(
+    productNamesMatch('Tefal AeroSteam DT9814 Clothes Steamer', 'Tefal AeroSteam DT3030 Clothes Steamer'),
+    false
+  );
+  assert.equal(productNamesMatch('Byredo La Tulipe Body Wash 225ml', 'Byredo La Tulipe Body Wash 100ml'), false);
 });

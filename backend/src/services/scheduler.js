@@ -17,7 +17,9 @@ export async function checkTrackedItem(item) {
   const discoveredOffer = discoveryTracked
     ? await findCheapestMatchingOffer(item.name, item.currency || 'GBP')
     : null;
-  let cheapestOffer = discoveredOffer ? await verifyShoppingOffer(discoveredOffer) : null;
+  let cheapestOffer = discoveredOffer
+    ? await verifyShoppingOffer(discoveredOffer, item.name)
+    : null;
   let newPrice = cheapestOffer?.price ?? null;
 
   if (newPrice === null) {
@@ -156,7 +158,6 @@ export function stopScheduler() {
 export async function triggerPriceCheck() {
   return await checkAllPrices();
 }
-
 
 
 

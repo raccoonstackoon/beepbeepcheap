@@ -2551,7 +2551,34 @@ export function pricesAgree(advertisedPrice, merchantPrice) {
   return Math.abs(advertised - merchant) <= Math.max(1, advertised * 0.02);
 }
 
-export async function verifyShoppingOffer(offer) {
+export function productNamesMatch(expectedName, actualName) {
+  const normalize = (value) => String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  const expected = normalize(expectedName);
+  const actual = normalize(actualName);
+  if (!expected || !actual) return false;
+
+  // Model numbers and measurable variants are identity-critical.
+  const identityPatterns = [
+    /\b[a-z]{1,5}\d{3,}[a-z0-9]*\b/g,
+    /\b\d+(?:\.\d+)?\s*(?:ml|cl|l|mg|g|kg|oz|lb|cm|mm|inch|inches|pack|count|pcs|piece|pieces)\b/g,
+    /\bx\s*\d+\b/g,
+  ];
+  for (const pattern of identityPatterns) {
+    const required = expected.match(pattern) || [];
+    if (required.some((token) => !actual.includes(token.replace(/\s+/g, ' ').trim()))) return false;
+  }
+
+  const ignored = new Set([
+    'a', 'an', 'and', 'for', 'in', 'of', 'the', 'to', 'with',
+    'new', 'sale', 'official', 'online', 'women', 'womens', 'men', 'mens',
+  ]);
+  const words = expected.split(' ').filter((word) => word.length > 1 && !ignored.has(word));
+  const actualWords = new Set(actual.split(' '));
+  const matched = words.filter((word) => actualWords.has(word)).length;
+  return matched >= Math.max(2, Math.ceil(words.length * 0.6));
+}
+
+export async function verifyShoppingOffer(offer, expectedProductName = null) {
   if (!offer?.productUrl || !offer?.price || !offer.currency) return null;
 
   const result = await scrapeProduct(offer.productUrl);
@@ -2561,7 +2588,7 @@ export async function verifyShoppingOffer(offer) {
     || result.priceConfidence !== 'high'
     || !result.currency
     || currencyCode(offer.currency) !== result.currency
-    || !pricesAgree(offer.price, result.price)
+    || (expectedProductName && !productNamesMatch(expectedProductName, result.name))
   ) {
     console.log(
       `   ⚠️ Shopping offer not confirmed by merchant page: ` +
@@ -2569,6 +2596,13 @@ export async function verifyShoppingOffer(offer) {
       `(page: ${result.price ? `${result.currency || '?'} ${result.price}` : 'unavailable'})`
     );
     return null;
+  }
+
+  if (!pricesAgree(offer.price, result.price)) {
+    console.log(
+      `   ℹ️ Search price ${offer.price} was stale; accepting identity-matched ` +
+      `merchant price ${result.price}`
+    );
   }
 
   return {
