@@ -1,6 +1,6 @@
 import cron from 'node-cron';
 import { getAllItems, updateItemPrice } from '../database/queries.js';
-import { findCheapestMatchingOffer, scrapePrice, verifyShoppingOffer } from './scraper.js';
+import { findMatchingOffers, scrapePriceResult, selectCheapestOffer, verifyShoppingOffer } from './scraper.js';
 
 let schedulerTask = null;
 
@@ -14,16 +14,28 @@ export async function checkTrackedItem(item) {
     discoveryTracked = false;
   }
 
-  const discoveredOffer = discoveryTracked
-    ? await findCheapestMatchingOffer(item.name, item.currency || 'GBP')
-    : null;
-  let cheapestOffer = discoveredOffer
-    ? await verifyShoppingOffer(discoveredOffer, item.name)
-    : null;
+  const discoveredOffers = discoveryTracked
+    ? await findMatchingOffers(item.name, item.currency || 'GBP')
+    : [];
+  const verifiedOffers = [];
+
+  // Search metadata can be stale or a merchant can block scraping. Verify in
+  // ascending price order, then compare the confirmed merchant-page prices.
+  // A stale £500 snippet might verify at £640 while the next offer is truly
+  // £530, so stopping after the first successful scrape is still incorrect.
+  for (const offer of discoveredOffers.slice(0, 3)) {
+    const verified = await verifyShoppingOffer(offer, item.name);
+    if (verified) verifiedOffers.push(verified);
+  }
+  let cheapestOffer = selectCheapestOffer(verifiedOffers);
   let newPrice = cheapestOffer?.price ?? null;
 
   if (newPrice === null) {
-    newPrice = await scrapePrice(item.url, item.current_price, item.currency);
+    const scrapeResult = await scrapePriceResult(item.url, item.current_price, item.currency);
+    if (!scrapeResult.verified) {
+      return { checked: false, updated: false, item, reason: scrapeResult.reason };
+    }
+    newPrice = scrapeResult.price;
     cheapestOffer = null;
   }
   if (newPrice === null) return { checked: false, updated: false, item };
@@ -158,6 +170,3 @@ export function stopScheduler() {
 export async function triggerPriceCheck() {
   return await checkAllPrices();
 }
-
-
-

@@ -6,6 +6,9 @@ import { lookupBarcode, isValidBarcode } from './barcodeService.js';
 
 // Lazy-load Anthropic client (only when needed)
 let anthropic = null;
+let resolvedAnthropicModel = null;
+
+const DEFAULT_ANTHROPIC_MODEL = 'claude-sonnet-5';
 
 function getAnthropic() {
   if (!anthropic) {
@@ -19,6 +22,87 @@ function getAnthropic() {
   return anthropic;
 }
 
+export function selectAvailableAnthropicModel(modelIds, configuredModel = null) {
+  const available = new Set((modelIds || []).filter(Boolean));
+  const preferred = [
+    configuredModel,
+    DEFAULT_ANTHROPIC_MODEL,
+    ...(modelIds || []).filter((id) => /^claude-sonnet-/i.test(id)),
+    ...(modelIds || []).filter((id) => /^claude-opus-/i.test(id)),
+    ...(modelIds || []).filter((id) => /^claude-haiku-/i.test(id)),
+  ].filter(Boolean);
+
+  return preferred.find((id) => available.has(id)) || null;
+}
+
+async function createAnthropicMessage(request) {
+  const client = getAnthropic();
+  const configuredModel = String(process.env.ANTHROPIC_VISION_MODEL || '').trim() || null;
+  const initialModel = resolvedAnthropicModel || configuredModel || DEFAULT_ANTHROPIC_MODEL;
+
+  try {
+    const response = await client.messages.create({ ...request, model: initialModel });
+    resolvedAnthropicModel = initialModel;
+    return response;
+  } catch (error) {
+    // Model aliases and dated IDs are retired over time. On a model-specific
+    // 404, ask the account which current models it can use and retry once.
+    if (error?.status !== 404) throw error;
+
+    const models = await client.models.list({ limit: 100 });
+    const fallbackModel = selectAvailableAnthropicModel(
+      models.data?.map((model) => model.id),
+      configuredModel
+    );
+    if (!fallbackModel || fallbackModel === initialModel) throw error;
+
+    console.warn(`⚠️ Anthropic model "${initialModel}" is unavailable; retrying with "${fallbackModel}"`);
+    const response = await client.messages.create({ ...request, model: fallbackModel });
+    resolvedAnthropicModel = fallbackModel;
+    return response;
+  }
+}
+
+function clampFocusArea(focusArea) {
+  if (!focusArea) return null;
+  const x = Math.max(0, Math.min(100, Number(focusArea.x)));
+  const y = Math.max(0, Math.min(100, Number(focusArea.y)));
+  const width = Math.max(0, Math.min(100 - x, Number(focusArea.width)));
+  const height = Math.max(0, Math.min(100 - y, Number(focusArea.height)));
+  if (![x, y, width, height].every(Number.isFinite) || width < 1 || height < 1) return null;
+  if (x === 0 && y === 0 && width === 100 && height === 100) return null;
+  return { x, y, width, height };
+}
+
+async function getFocusedImageBuffer(imagePath, focusArea) {
+  const normalized = clampFocusArea(focusArea);
+  const oriented = await sharp(imagePath)
+    .rotate()
+    .toBuffer({ resolveWithObject: true });
+  if (!normalized) return oriented.data;
+
+  const imageWidth = oriented.info.width;
+  const imageHeight = oriented.info.height;
+  const left = Math.max(0, Math.min(imageWidth - 1, Math.floor(imageWidth * normalized.x / 100)));
+  const top = Math.max(0, Math.min(imageHeight - 1, Math.floor(imageHeight * normalized.y / 100)));
+  const cropWidth = Math.max(1, Math.min(imageWidth - left, Math.round(imageWidth * normalized.width / 100)));
+  const cropHeight = Math.max(1, Math.min(imageHeight - top, Math.round(imageHeight * normalized.height / 100)));
+
+  return sharp(oriented.data)
+    .extract({ left, top, width: cropWidth, height: cropHeight })
+    .toBuffer();
+}
+
+/** Create a public JPEG crop for Google Lens while preserving the original upload. */
+export async function createFocusedImage(imagePath, focusArea) {
+  if (!clampFocusArea(focusArea)) return imagePath;
+  const parsed = path.parse(imagePath);
+  const outputPath = path.join(parsed.dir, `${parsed.name}-focus.jpg`);
+  const focusedBuffer = await getFocusedImageBuffer(imagePath, focusArea);
+  await sharp(focusedBuffer).jpeg({ quality: 92 }).toFile(outputPath);
+  return outputPath;
+}
+
 /**
  * Process an image to extract product information using Claude Vision
  * @param {string} imagePath - Path to the image file
@@ -29,7 +113,8 @@ export async function processImage(imagePath, type = 'product', focusArea = null
   try {
     // Read and optimize image for Claude
     // Resize large images to max 1568px (Claude's recommended max) while maintaining aspect ratio
-    let imageBuffer = await sharp(imagePath)
+    const focusedImage = await getFocusedImageBuffer(imagePath, focusArea);
+    let imageBuffer = await sharp(focusedImage)
       .resize(1568, 1568, { 
         fit: 'inside',  // Maintain aspect ratio, fit within bounds
         withoutEnlargement: true  // Don't upscale small images
@@ -45,14 +130,8 @@ export async function processImage(imagePath, type = 'product', focusArea = null
     if (focusArea) {
       focusInstruction = `
 IMPORTANT: The user has highlighted a specific area of the image for you to focus on.
-The highlighted region is:
-- Starting at ${Math.round(focusArea.x)}% from the left edge
-- Starting at ${Math.round(focusArea.y)}% from the top edge  
-- Width: ${Math.round(focusArea.width)}% of the image
-- Height: ${Math.round(focusArea.height)}% of the image
-
-Please FOCUS primarily on this highlighted area when extracting information.
-This is likely where the most important information (price, product name, etc.) is located.
+The image supplied here has already been cropped to that highlighted region.
+Identify the product visible in this crop and do not infer details from objects outside it.
 
 `;
     }
@@ -143,8 +222,7 @@ Only return the JSON object, no other text.`;
       ? "You are a helpful assistant that can accurately read and interpret images, especially price tags and barcodes. When shown a price tag: 1) FIRST look for any barcode and carefully read the numbers printed below it - this is critical for product identification. 2) Read the exact price. 3) Identify store name from logos or branding. 4) Extract product name and brand. Be extremely precise with numbers, especially barcode digits."
       : "You are an expert product identifier with exceptional visual analysis skills. You excel at accurately identifying products from photos, especially clothing and fashion items. For clothing, you carefully analyze garment construction, where it's worn on the body, necklines, sleeves, waistbands, and overall silhouette to correctly distinguish between different garment types (e.g., cardigans vs trousers, dresses vs jumpsuits). You never rush to conclusions and always verify your identification makes sense.";
     
-    const response = await getAnthropic().messages.create({
-      model: 'claude-opus-4-20250514',
+    const response = await createAnthropicMessage({
       max_tokens: 1024,
       system: systemPrompt,
       messages: [
@@ -274,8 +352,7 @@ Return as JSON:
 Focus on major retailers like Amazon, Walmart, Target, Best Buy, etc.
 Only return the JSON object, no other text.`;
 
-    const response = await getAnthropic().messages.create({
-      model: 'claude-opus-4-20250514',
+    const response = await createAnthropicMessage({
       max_tokens: 1024,
       messages: [
         { role: 'user', content: prompt }

@@ -83,7 +83,15 @@ async function sendToSubscriptions(subscriptions, payload) {
     })
   );
 
+  let sent = 0;
+  let failed = 0;
   results.forEach((result, i) => {
+    if (result.status === 'fulfilled') {
+      sent++;
+      return;
+    }
+
+    failed++;
     if (result.status === 'rejected') {
       const statusCode = result.reason?.statusCode;
       if (statusCode === 404 || statusCode === 410) {
@@ -95,7 +103,7 @@ async function sendToSubscriptions(subscriptions, payload) {
     }
   });
 
-  console.log(`📨 Push sent to ${subscriptions.length} subscriber(s)`);
+  console.log(`📨 Web push delivery: ${sent} sent, ${failed} failed`);
 }
 
 /**

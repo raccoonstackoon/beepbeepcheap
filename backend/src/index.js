@@ -187,7 +187,7 @@ app.get('/api/health', async (req, res) => {
 
   res.json({
     status: 'ok',
-    priceRefreshVersion: 'merchant-identity-v2',
+    priceRefreshVersion: 'lens-price-selection-v3',
     timestamp: new Date().toISOString(),
     env: {
       NODE_ENV: process.env.NODE_ENV,
@@ -299,6 +299,5 @@ server.listen(PORT, '0.0.0.0', () => {
   // Start the daily price check scheduler
   startScheduler();
 });
-
 
 

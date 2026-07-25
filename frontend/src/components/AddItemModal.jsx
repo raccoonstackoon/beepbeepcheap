@@ -265,7 +265,8 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
       const data = await safeJson(res);
 
       if (!res.ok) {
-        throw new Error(data.error || 'Failed to process image');
+        const detail = data.details ? `: ${data.details}` : '';
+        throw new Error(`${data.error || 'Failed to process image'}${detail}`);
       }
 
       // If Google Lens found results directly, show them immediately
@@ -301,6 +302,9 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
 
     } catch (err) {
       setError(err.message);
+      // Return to the annotated photo so the user can retry or go back,
+      // instead of leaving the modal with no visible state.
+      setIsAnnotating(true);
     }
 
     setLoading(false);
@@ -324,6 +328,9 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
       formData.append('image', imageFile);
       if (shopName) {
         formData.append('shopName', shopName);
+      }
+      if (product?.itemName) {
+        formData.append('productName', product.itemName);
       }
       
       // Include the focus area if we have it
@@ -364,6 +371,7 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
       
     } catch (err) {
       setError(err.message);
+      setNeedsShopName(true);
     }
     
     setLoading(false);
@@ -728,6 +736,7 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
         {/* Image Mode - Step 2: Annotate with Spotlight */}
         {mode === 'product' && isAnnotating && imagePreview && !loading && (
           <div className="annotation-mode">
+            {error && <p className="error-message">{error}</p>}
             <ImageAnnotator
               imageUrl={imagePreview}
               mode={mode}

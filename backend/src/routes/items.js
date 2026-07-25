@@ -4,8 +4,18 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import * as queries from '../database/queries.js';
 import { requireUserId } from '../middleware/userId.js';
-import { scrapeProduct, scrapePrice, searchShoppingSerpAPI, resolveMerchantOffers, searchCostco, getStoreName, normalizeProductUrl, currencyCode } from '../services/scraper.js';
-import { processImage } from '../services/imageProcessor.js';
+import {
+  scrapeProduct,
+  searchShoppingSerpAPI,
+  searchImageViaGoogleLens,
+  resolveMerchantOffers,
+  searchCostco,
+  getStoreName,
+  normalizeProductUrl,
+  currencyCode,
+  productNamesMatch,
+} from '../services/scraper.js';
+import { createFocusedImage, processImage } from '../services/imageProcessor.js';
 import { checkTrackedItem } from '../services/scheduler.js';
 
 const router = express.Router();
@@ -192,10 +202,10 @@ router.post('/url', async (req, res) => {
 
 // POST /api/items/image - Add item by product photo
 // NEW FLOW:
-// 1. Analyze image to detect brand/logo
-// 2. If no brand detected, return needsShopName=true so frontend asks user
-// 3. Once we have a brand, search the brand's official website for visually similar products
-// 4. Return the matching product URL from the brand's official site
+// 1. Identify the product with Google Lens
+// 2. Fall back to visual AI only when Lens cannot identify it
+// 3. Search Google Shopping for same-product offers
+// 4. Return the cheapest matching merchant listings
 //
 // Params:
 // - identifyOnly=true: Just identify the product and check for brand (step 1-2)
@@ -209,10 +219,13 @@ router.post('/image', upload.single('image'), async (req, res) => {
     const imagePath = req.file.path;
     // Create full URL for the uploaded image (not just relative path)
     const host = req.get('host');
-    const protocol = req.protocol;
-    const imageUrl = `${protocol}://${host}/uploads/${req.file.filename}`;
+    const forwardedProtocol = req.get('x-forwarded-proto')?.split(',')[0]?.trim();
+    const protocol = forwardedProtocol || req.protocol;
+    const publicBackendOrigin = String(process.env.PUBLIC_BACKEND_URL || `${protocol}://${host}`).replace(/\/$/, '');
+    const imageUrl = `${publicBackendOrigin}/uploads/${req.file.filename}`;
     const identifyOnly = req.body.identifyOnly === 'true';
     const userProvidedShop = req.body.shopName?.trim() || null;
+    const userProvidedProduct = req.body.productName?.trim() || null;
     
     // Parse focus area if provided (from spotlight annotation)
     let focusArea = null;
@@ -230,9 +243,53 @@ router.post('/image', upload.single('image'), async (req, res) => {
     if (userProvidedShop) console.log(`   User-provided brand: ${userProvidedShop}`);
     
     // ═══════════════════════════════════════════════════════════════════════
-    // STEP 1: Analyze image with AI to detect brand and identify product
+    // STEP 1: Use Google Lens first. Anthropic is only a fallback when Lens
+    // cannot identify the image (or when running locally with a private URL).
     // ═══════════════════════════════════════════════════════════════════════
-    const result = await processImage(imagePath, 'product', focusArea);
+    let result = null;
+    let lensSearch = null;
+    let identificationMethod = 'user';
+
+    if (!userProvidedProduct && !userProvidedShop) {
+      const lensImagePath = await createFocusedImage(imagePath, focusArea);
+      const lensImageUrl = lensImagePath === imagePath
+        ? imageUrl
+        : `${publicBackendOrigin}/uploads/${path.basename(lensImagePath)}`;
+      lensSearch = await searchImageViaGoogleLens(lensImageUrl);
+      const bestLensMatch = lensSearch.results?.find(
+        (match) => match.title && match.title.toLowerCase() !== 'unknown product'
+      );
+      if (bestLensMatch) {
+        result = {
+          success: true,
+          itemName: bestLensMatch.title,
+          brand: null,
+          brandConfidence: 'none',
+          brandSource: 'google_lens',
+          description: `Identified by Google Lens from ${bestLensMatch.storeName || 'a visual match'}`,
+          variants: {},
+        };
+        identificationMethod = 'google_lens';
+        console.log(`✅ Google Lens identified: ${bestLensMatch.title}`);
+      }
+    }
+
+    if (!result && userProvidedProduct) {
+      result = {
+        success: true,
+        itemName: userProvidedProduct,
+        brand: userProvidedShop,
+        brandConfidence: userProvidedShop ? 'high' : 'none',
+        brandSource: 'user',
+        variants: {},
+      };
+    }
+
+    if (!result) {
+      console.log('↩️ Google Lens did not identify the product; using visual AI fallback');
+      result = await processImage(imagePath, 'product', focusArea);
+      identificationMethod = 'anthropic_fallback';
+    }
     
     if (!result.success) {
       return res.status(400).json({ 
@@ -277,7 +334,7 @@ router.post('/image', upload.single('image'), async (req, res) => {
     }
     
     // ═══════════════════════════════════════════════════════════════════════
-    // STEP 3: SEARCH DUCKDUCKGO SHOPPING for cheapest prices
+    // STEP 3: SEARCH GOOGLE SHOPPING for cheapest matching prices
     // Returns TOP 3 cheapest results for user to choose from
     // ═══════════════════════════════════════════════════════════════════════
     const productName = result.itemName || result.description || '';
@@ -299,7 +356,8 @@ router.post('/image', upload.single('image'), async (req, res) => {
     
     console.log(`📊 Found ${shoppingResults.results?.length || 0} shopping results`);
     
-    // Filter results to ONLY show items from the specified store (if brand provided)
+    // Filter results to the identified product before comparing prices. Shopping
+    // results can include cheap accessories or merely similar items.
     let filteredResults = shoppingResults.results || [];
     
     if (brandName) {
@@ -314,6 +372,12 @@ router.post('/image', upload.single('image'), async (req, res) => {
       
       console.log(`🏪 Filtered to "${brandName}" only: ${filteredResults.length} of ${beforeCount} results`);
     }
+
+    const productMatches = filteredResults.filter((shoppingResult) =>
+      productNamesMatch(productName, shoppingResult.title)
+    );
+    console.log(`🎯 Kept ${productMatches.length} same-product matches before price ranking`);
+    filteredResults = productMatches;
     
     // Claude/Google can return the same product from several merchants in an
     // arbitrary order. Once the brand/product filter has established
@@ -324,8 +388,21 @@ router.post('/image', upload.single('image'), async (req, res) => {
       return aPrice - bPrice;
     });
 
-    const topResults = await resolveMerchantOffers(filteredResults.slice(0, 3));
+    let topResults = await resolveMerchantOffers(filteredResults.slice(0, 3));
     topResults.sort((a, b) => (Number(a.price) || Number.POSITIVE_INFINITY) - (Number(b.price) || Number.POSITIVE_INFINITY));
+
+    // If Lens identified the item but text shopping had no offer, retain priced
+    // Lens product matches rather than dropping the successful visual search.
+    if (topResults.length === 0 && identificationMethod === 'google_lens') {
+      topResults = (lensSearch?.results || [])
+        .filter((offer) =>
+          Number.isFinite(Number(offer.price))
+          && currencyCode(offer.currency) === 'GBP'
+          && productNamesMatch(productName, offer.title)
+        )
+        .sort((a, b) => Number(a.price) - Number(b.price))
+        .slice(0, 3);
+    }
     
     for (const r of topResults) {
       console.log(`   💰 ${r.currency || '£'}${r.price || 'N/A'} - ${r.title?.substring(0, 50)}... (${r.storeName})`);
@@ -340,7 +417,8 @@ router.post('/image', upload.single('image'), async (req, res) => {
       shoppingOptions: topResults,
       searchQuery: searchQuery,
       totalResultsFound: shoppingResults.results?.length || 0,
-      searchMethod: 'serpapi',
+      searchMethod: identificationMethod === 'google_lens' ? 'google_lens+serpapi' : 'serpapi',
+      skipConfirmation: identificationMethod === 'google_lens' && topResults.length > 0,
     });
     
   } catch (error) {
