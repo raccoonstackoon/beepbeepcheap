@@ -14,6 +14,8 @@ import {
   normalizeProductUrl,
   currencyCode,
   productNamesMatch,
+  rankMatchingShoppingOffers,
+  selectCheapestDistinctOffers,
 } from '../services/scraper.js';
 import { createFocusedImage, processImage } from '../services/imageProcessor.js';
 import { checkTrackedItem } from '../services/scheduler.js';
@@ -373,9 +375,7 @@ router.post('/image', upload.single('image'), async (req, res) => {
       console.log(`🏪 Filtered to "${brandName}" only: ${filteredResults.length} of ${beforeCount} results`);
     }
 
-    const productMatches = filteredResults.filter((shoppingResult) =>
-      productNamesMatch(productName, shoppingResult.title)
-    );
+    const productMatches = rankMatchingShoppingOffers(filteredResults, productName, 'GBP');
     console.log(`🎯 Kept ${productMatches.length} same-product matches before price ranking`);
     filteredResults = productMatches;
     
@@ -388,21 +388,26 @@ router.post('/image', upload.single('image'), async (req, res) => {
       return aPrice - bPrice;
     });
 
-    let topResults = await resolveMerchantOffers(filteredResults.slice(0, 3));
-    topResults.sort((a, b) => (Number(a.price) || Number.POSITIVE_INFINITY) - (Number(b.price) || Number.POSITIVE_INFINITY));
+    const distinctCandidates = selectCheapestDistinctOffers(filteredResults, 5);
+    let topResults = await resolveMerchantOffers(distinctCandidates);
+    topResults = selectCheapestDistinctOffers(
+      topResults.filter((offer) =>
+        currencyCode(offer.currency) === 'GBP'
+        && productNamesMatch(productName, offer.title)
+      ),
+      3
+    );
 
     // If Lens identified the item but text shopping had no offer, retain priced
     // Lens product matches rather than dropping the successful visual search.
     if (topResults.length === 0 && identificationMethod === 'google_lens') {
-      topResults = (lensSearch?.results || [])
+      topResults = selectCheapestDistinctOffers((lensSearch?.results || [])
         .filter((offer) =>
           Number.isFinite(Number(offer.price))
           && Number(offer.price) > 0
           && currencyCode(offer.currency) === 'GBP'
           && productNamesMatch(productName, offer.title)
-        )
-        .sort((a, b) => Number(a.price) - Number(b.price))
-        .slice(0, 3);
+        ), 3);
     }
     
     for (const r of topResults) {

@@ -2738,6 +2738,35 @@ export function selectCheapestOffer(offers) {
     .sort((a, b) => Number(a.price) - Number(b.price))[0] || null;
 }
 
+export function selectCheapestDistinctOffers(offers, limit = 3) {
+  const selected = [];
+  const seenStores = new Set();
+  const seenUrls = new Set();
+
+  for (const offer of [...(offers || [])].sort((a, b) => Number(a.price) - Number(b.price))) {
+    const price = Number(offer?.price);
+    if (!Number.isFinite(price) || price <= 0 || !offer?.productUrl) continue;
+
+    const storeKey = normalizeComparisonText(offer.storeName);
+    let urlKey = '';
+    try {
+      const parsed = new URL(offer.productUrl);
+      parsed.hash = '';
+      urlKey = parsed.href;
+    } catch {
+      urlKey = String(offer.productUrl);
+    }
+
+    if ((storeKey && seenStores.has(storeKey)) || seenUrls.has(urlKey)) continue;
+    if (storeKey) seenStores.add(storeKey);
+    seenUrls.add(urlKey);
+    selected.push(offer);
+    if (selected.length >= limit) break;
+  }
+
+  return selected;
+}
+
 export async function findMatchingOffers(productName, wantedCurrency = null) {
   const search = await searchShoppingSerpAPI(productName);
   if (!search.success || !search.results?.length) return [];
@@ -2794,6 +2823,25 @@ export function productNamesMatch(expectedName, actualName) {
   for (const pattern of identityPatterns) {
     const required = expected.match(pattern) || [];
     if (required.some((token) => !actual.includes(token.replace(/\s+/g, ' ').trim()))) return false;
+  }
+
+  // If both titles explicitly name a colour, a different colour is a
+  // different product variant. Missing colour text is tolerated because many
+  // merchant titles omit it even when the product page has the right option.
+  const colours = new Set([
+    'black', 'white', 'red', 'blue', 'navy', 'green', 'olive', 'yellow',
+    'orange', 'pink', 'purple', 'brown', 'beige', 'cream', 'grey', 'gray',
+    'silver', 'gold', 'rose gold', 'tan', 'khaki', 'burgundy', 'maroon',
+  ]);
+  const hasTerm = (text, term) => ` ${text} `.includes(` ${term} `);
+  const expectedColours = [...colours].filter((colour) => hasTerm(expected, colour));
+  const actualColours = [...colours].filter((colour) => hasTerm(actual, colour));
+  if (
+    expectedColours.length > 0
+    && actualColours.length > 0
+    && !expectedColours.some((colour) => actualColours.includes(colour))
+  ) {
+    return false;
   }
 
   const ignored = new Set([

@@ -59,6 +59,7 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
   const [trackIncluded, setTrackIncluded] = useState([]);
   const [selectedOption, setSelectedOption] = useState(null);
   const [backupResults, setBackupResults] = useState([]);
+  const [savingOptionIndex, setSavingOptionIndex] = useState(null);
   
   // Manual entry state (after extraction or direct)
   const [manualData, setManualData] = useState({
@@ -272,8 +273,13 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
       // If Google Lens found results directly, show them immediately
       if (data.skipConfirmation && data.shoppingOptions?.length > 0) {
         console.log('✅ Google Lens found results — showing directly');
-        setExtractedData(data.extracted || {
+        const lensProduct = data.extracted || {
           itemName: data.shoppingOptions[0]?.title || 'Product',
+          localImageUrl: data.localImageUrl
+        };
+        setExtractedData(lensProduct);
+        setIdentifiedProduct({
+          ...lensProduct,
           localImageUrl: data.localImageUrl
         });
         setShoppingOptions(data.shoppingOptions);
@@ -411,36 +417,6 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
     });
   };
   
-  // Handle user selecting a shopping option
-  const handleSelectOption = (option) => {
-    setSelectedOption(option);
-    
-    // Use the retailer's product image from the shopping option
-    // Fall back to user's uploaded image if retailer image not available
-    let finalImageUrl = option.imageUrl || identifiedProduct?.localImageUrl || '';
-    
-    // Fix protocol-relative URLs
-    if (finalImageUrl && finalImageUrl.startsWith('//')) {
-      finalImageUrl = 'https:' + finalImageUrl;
-    }
-    
-    // Debug logging to track image URL issues
-    console.log('📸 Image URL selection:', {
-      optionImageUrl: option.imageUrl,
-      localImageUrl: identifiedProduct?.localImageUrl,
-      finalImageUrl: finalImageUrl
-    });
-    
-    setManualData({
-      name: option.title || identifiedProduct?.itemName || '',
-      url: option.productUrl || '',
-      price: option.price?.toString() || '',
-      imageUrl: finalImageUrl,
-      storeName: option.storeName || ''
-      ,currency: currencyCode(option.currency || 'GBP')
-    });
-  };
-  
   // Confirm selection and save item
   const handleConfirmSelection = async () => {
     if (!selectedOption && !manualData.name) {
@@ -476,6 +452,7 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
       const trackedSources = rankedOptions.map((opt) => ({
         title: (opt.title || '').trim(),
         url: opt.productUrl || null,
+        productUrl: opt.productUrl || null,
         imageUrl: fixUrl(opt.imageUrl || ''),
         price: opt.price || null,
         currency: currencyCode(opt.currency || 'GBP'),
@@ -509,6 +486,15 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
   };
 
   const handleTrackAll = () => saveMultiTrackFromOptions(shoppingOptions);
+
+  const handleTrackOne = async (option, index) => {
+    setSavingOptionIndex(index);
+    try {
+      await saveMultiTrackFromOptions([option]);
+    } finally {
+      setSavingOptionIndex(null);
+    }
+  };
 
   const handleTrackSelected = () => {
     const picked = shoppingOptions.filter((_, i) => trackIncluded[i]);
@@ -872,12 +858,12 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
         {extractedData && shoppingOptions.length > 0 && !selectedOption && (
           <div className="shopping-options-mode">
             <div className="shopping-options-header">
-              <h3>Select to track</h3>
+              <h3>Cheapest matches</h3>
               <span className="shopping-options-count">{shoppingOptions.length} found</span>
             </div>
             
             <p className="shopping-options-select-hint">
-              Tap <strong>image or title</strong> to track one listing, or use the <strong>checkbox</strong> and <strong>Track selected</strong>. The first result is checked by default.
+              These are the lowest-priced listings that match the scanned product. Tap <strong>Track item</strong> for one, or use the checkboxes to track several.
             </p>
 
             <div className="shopping-options-list">
@@ -896,18 +882,7 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
                       aria-label={`Include listing ${index + 1} when tracking selected`}
                     />
                   </label>
-                  <div
-                    className="option-card-select-main"
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => handleSelectOption(option)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        handleSelectOption(option);
-                      }
-                    }}
-                  >
+                  <div className="option-card-select-main">
                     <div className="option-image-wrap">
                       {option.imageUrl && (
                         <img src={option.imageUrl} alt="" className="option-image" />
@@ -931,6 +906,25 @@ export default function AddItemModal({ onClose, onSuccess, apiBase, initialMode 
                       </div>
                     </div>
                   </div>
+                  <button
+                    type="button"
+                    className="option-track-one"
+                    onClick={() => handleTrackOne(option, index)}
+                    disabled={loading}
+                    aria-label={`Track ${option.title} from ${option.storeName}`}
+                  >
+                    {savingOptionIndex === index ? (
+                      <>
+                        <Loader size={13} className="spinning" />
+                        Saving
+                      </>
+                    ) : (
+                      <>
+                        Track item
+                        <Check size={13} />
+                      </>
+                    )}
+                  </button>
                   <button
                     type="button"
                     className="option-dismiss"

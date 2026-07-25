@@ -50,11 +50,12 @@ export async function checkTrackedItem(item) {
         currency: cheapestOffer.currencyCode || item.currency,
         storeName: cheapestOffer.storeName,
         productUrl: cheapestOffer.productUrl,
+        url: cheapestOffer.productUrl,
         imageUrl: cheapestOffer.imageUrl || item.image_url,
       };
       const sourceKey = `${source.storeName}|${source.productUrl}`;
       trackedSources = [source, ...existing.filter((entry) =>
-        `${entry.storeName}|${entry.productUrl}` !== sourceKey
+        `${entry.storeName}|${entry.productUrl || entry.url}` !== sourceKey
       )].slice(0, 10);
     } catch {
       trackedSources = null;

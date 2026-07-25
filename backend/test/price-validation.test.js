@@ -11,6 +11,7 @@ import {
   rankMatchingShoppingOffers,
   scrapeProduct,
   selectCheapestOffer,
+  selectCheapestDistinctOffers,
 } from '../src/services/scraper.js';
 
 test('accepts the same merchant and shopping price', () => {
@@ -49,6 +50,8 @@ test('matches the same product while rejecting another model or size', () => {
     false
   );
   assert.equal(productNamesMatch('Byredo La Tulipe Body Wash 225ml', 'Byredo La Tulipe Body Wash 100ml'), false);
+  assert.equal(productNamesMatch('Alaia Fishnet Flat Mules Black', 'Alaia Fishnet Flat Mules White'), false);
+  assert.equal(productNamesMatch('Alaia Fishnet Flat Mules Black', 'Alaia Fishnet Flat Mules'), true);
 });
 
 test('normalizes accented brand names when matching products', () => {
@@ -76,6 +79,20 @@ test('compares verified page prices instead of stopping at the first stale snipp
     { storeName: 'Third result', price: 567.7 },
   ]);
   assert.equal(selected.storeName, 'Second result');
+});
+
+test('returns the cheapest three distinct merchant offers with valid prices', () => {
+  const selected = selectCheapestDistinctOffers([
+    { storeName: 'ALAÏA', price: 640, productUrl: 'https://alaia.example/one' },
+    { storeName: 'Lyst', price: 530, productUrl: 'https://lyst.example/one' },
+    { storeName: 'Lyst', price: 535, productUrl: 'https://lyst.example/two' },
+    { storeName: 'eBay', price: 567.7, productUrl: 'https://ebay.example/one' },
+    { storeName: 'Mytheresa', price: 700, productUrl: 'https://mytheresa.example/one' },
+    { storeName: 'No Price', price: null, productUrl: 'https://invalid.example/one' },
+  ]);
+
+  assert.deepEqual(selected.map((offer) => offer.storeName), ['Lyst', 'eBay', 'ALAÏA']);
+  assert.deepEqual(selected.map((offer) => offer.price), [530, 567.7, 640]);
 });
 
 test('chooses the advertised merchant instead of an unrelated cheaper seller', () => {

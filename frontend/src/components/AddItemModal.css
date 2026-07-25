@@ -1105,21 +1105,15 @@
   position: relative;
 }
 
-/* Tappable area for “track this listing” — separate from checkbox so one tap toggles reliably */
+/* Product information sits separately from the explicit tracking action. */
 .option-card-select-main {
   flex: 1;
   display: flex;
   align-items: center;
   gap: var(--space-sm);
   min-width: 0;
-  cursor: pointer;
   border-radius: var(--border-radius-sm);
   text-align: left;
-}
-
-.option-card-select-main:focus-visible {
-  outline: 2px solid var(--pixel-teal);
-  outline-offset: 2px;
 }
 
 .shopping-option-card:hover {
@@ -1211,6 +1205,42 @@
   color: var(--pixel-dark);
   font-weight: bold;
   margin-left: auto;
+}
+
+.option-track-one {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 34px;
+  padding: 7px 9px;
+  margin-right: 14px;
+  border: 1.5px solid var(--pixel-teal);
+  border-radius: var(--border-radius-sm);
+  background: var(--pixel-teal);
+  color: var(--pixel-white);
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  line-height: 1.2;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.option-track-one:hover:not(:disabled) {
+  filter: brightness(0.94);
+  transform: translateY(-1px);
+}
+
+.option-track-one:focus-visible {
+  outline: 2px solid var(--pixel-dark);
+  outline-offset: 2px;
+}
+
+.option-track-one:disabled {
+  cursor: wait;
+  opacity: 0.65;
 }
 
 .currency-label {
@@ -1445,6 +1475,13 @@
     font-size: var(--font-size-sm);
   }
 
+  .option-track-one {
+    min-height: 32px;
+    padding: 6px 7px;
+    margin-right: 12px;
+    font-size: 7px;
+  }
+
   .brand-preview {
     gap: var(--space-sm);
     padding: var(--space-sm);
@@ -1518,6 +1555,15 @@
 
   .option-title {
     font-size: 8px;
+  }
+
+  .option-track-one {
+    flex-direction: column;
+    gap: 2px;
+    min-width: 48px;
+    padding: 5px 6px;
+    white-space: normal;
+    text-align: center;
   }
 
   .brand-preview-image {
