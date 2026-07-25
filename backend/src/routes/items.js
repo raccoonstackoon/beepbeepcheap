@@ -397,6 +397,7 @@ router.post('/image', upload.single('image'), async (req, res) => {
       topResults = (lensSearch?.results || [])
         .filter((offer) =>
           Number.isFinite(Number(offer.price))
+          && Number(offer.price) > 0
           && currencyCode(offer.currency) === 'GBP'
           && productNamesMatch(productName, offer.title)
         )
